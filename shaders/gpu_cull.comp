@@ -1,0 +1,71 @@
+#version 450
+// GPU-Driven Rendering 剔除计算着色器（第23章）
+// 在 GPU 上并行执行视锥体剔除，生成间接绘制参数
+
+layout(local_size_x = 64) in;
+
+// 每个绘制对象的包围球
+struct DrawObject {
+    vec4 boundingSphere;  // xyz=中心, w=半径
+    uint meshletCount;    // 该对象的 meshlet 数量
+    uint padding[3];
+};
+
+// 间接绘制命令结构（对应 VkDrawIndirectCommand）
+struct DrawIndirectCommand {
+    uint vertexCount;
+    uint instanceCount;   // 0 = 被剔除（不绘制）
+    uint firstVertex;
+    uint firstInstance;
+};
+
+layout(std430, binding = 0) readonly buffer ObjectBuffer {
+    DrawObject objects[];
+};
+
+layout(std430, binding = 1) buffer IndirectCommands {
+    DrawIndirectCommand commands[];
+};
+
+layout(std430, binding = 2) buffer DrawCount {
+    uint visibleCount;  // 可见对象计数（原子操作更新）
+};
+
+layout(push_constant) uniform PC {
+    mat4  viewProjection;
+    vec4  frustumPlanes[6];   // 视锥体的 6 个平面（法线+距离）
+    uint  objectCount;
+} pc;
+
+// 视锥体平面检测：包围球是否在视锥体外
+bool isCulled(vec4 sphere)
+{
+    for (int i = 0; i < 6; ++i) {
+        // 点到平面有符号距离
+        float dist = dot(pc.frustumPlanes[i].xyz, sphere.xyz) + pc.frustumPlanes[i].w;
+        if (dist < -sphere.w) return true;  // 包围球完全在平面外侧 → 剔除
+    }
+    return false;
+}
+
+void main()
+{
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= pc.objectCount) return;
+
+    DrawObject obj = objects[id];
+
+    if (isCulled(obj.boundingSphere)) {
+        // 被剔除：instanceCount=0，GPU 直接跳过绘制
+        commands[id].instanceCount = 0;
+    } else {
+        // 可见：设置有效绘制参数
+        commands[id].vertexCount   = obj.meshletCount * 3;
+        commands[id].instanceCount = 1;
+        commands[id].firstVertex   = id * obj.meshletCount * 3;
+        commands[id].firstInstance = id;
+
+        // 原子计数（用于统计可见数量，可选）
+        atomicAdd(visibleCount, 1);
+    }
+}

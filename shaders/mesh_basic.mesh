@@ -1,0 +1,72 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// 网格着色器（Mesh Shader）— 第21章
+//
+// Mesh Shader 完全替代顶点着色器 + 图元装配阶段：
+//   - 直接在 GPU 上生成顶点和图元（三角形）
+//   - 不再需要顶点缓冲绑定（VkCmdBindVertexBuffers）
+//   - 不再需要 VkVertexInputAttributeDescription
+//   - 一个 workgroup 处理一个 meshlet（子网格）
+//
+// Meshlet（子网格）：
+//   - 通常包含 64-128 个顶点，126 个三角形
+//   - 是 Mesh Shader 的基本工作单位
+//   - 预先从大网格切割好，CPU 传给 GPU 的 SSBO
+//
+// 本示例：直接在着色器里生成一个彩色三角形（无任何缓冲！）
+// ═══════════════════════════════════════════════════════════════════════════
+#version 450
+#extension GL_EXT_mesh_shader : require
+
+// 每个 workgroup 最多输出的顶点数和图元数
+// 注意：这是编译期常量，必须足够大
+layout(local_size_x = 3) in;              // 3 个线程处理 3 个顶点
+layout(triangles, max_vertices = 3, max_primitives = 1) out;  // 1 个三角形
+
+// 传给片段着色器的逐顶点数据
+layout(location = 0) out vec3 outColor[];  // [] 表示每顶点一个
+
+// UBO（可选，本示例用 push constant 代替）
+layout(push_constant) uniform PC {
+    mat4  viewProjection;
+    float time;
+} pc;
+
+// 内嵌的顶点数据（不需要顶点缓冲！）
+const vec2 positions[3] = vec2[](
+    vec2( 0.0, -0.6),
+    vec2( 0.6,  0.5),
+    vec2(-0.6,  0.5)
+);
+const vec3 colors[3] = vec3[](
+    vec3(1.0, 0.2, 0.2),
+    vec3(0.2, 1.0, 0.2),
+    vec3(0.2, 0.2, 1.0)
+);
+
+void main()
+{
+    // gl_LocalInvocationID.x 是当前线程在 workgroup 内的索引（0/1/2）
+    // Mesh Shader 使用 gl_LocalInvocationIndex 而非 gl_InvocationID（后者是TCS专用）
+    uint i = gl_LocalInvocationIndex;
+
+    // SetMeshOutputsEXT：声明实际输出多少顶点和图元
+    // （必须在写入任何输出前调用）
+    if (i == 0) SetMeshOutputsEXT(3, 1);
+
+    // 写入顶点数据
+    // gl_MeshVerticesEXT[i].gl_Position 替代了 gl_Position
+    float angle = pc.time * 0.5;
+    float c = cos(angle), s = sin(angle);
+    vec2 rotPos = vec2(
+        positions[i].x * c - positions[i].y * s,
+        positions[i].x * s + positions[i].y * c
+    );
+    gl_MeshVerticesEXT[i].gl_Position = vec4(rotPos, 0.0, 1.0);
+    outColor[i] = colors[i];
+
+    // 写入图元连接关系（只有线程0写，避免重复）
+    if (i == 0) {
+        // gl_PrimitiveTriangleIndicesEXT[图元索引] = 三角形的3个顶点索引
+        gl_PrimitiveTriangleIndicesEXT[0] = uvec3(0, 1, 2);
+    }
+}

@@ -1,0 +1,42 @@
+#version 450
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_KHR_shader_subgroup_basic      : enable
+
+layout(local_size_x = 256) in;
+
+// 输入：大数组
+layout(std430, binding = 0) readonly buffer InputBuffer  { float values[]; };
+// 输出：每 workgroup 一个部分和（runtime array 必须是 SSBO 最后一个成员）
+layout(std430, binding = 1)          buffer OutputBuffer { float partialSums[]; };
+// 调试信息（单独 SSBO）
+layout(std430, binding = 2)          buffer DebugBuffer  { uint subgroupSize; uint subgroupCount; };
+
+shared float wgSum;
+
+void main()
+{
+    uint gid  = gl_GlobalInvocationID.x;
+    uint lid  = gl_LocalInvocationID.x;
+    uint wgid = gl_WorkGroupID.x;
+
+    // Level 1：subgroup 内求和（硬件单指令，无 barrier）
+    float val    = (gid < values.length()) ? values[gid] : 0.0;
+    float sgSum  = subgroupAdd(val);
+
+    // Level 2：workgroup 汇总（每个 subgroup 的 lane-0 加到共享变量）
+    if (lid == 0u) wgSum = 0.0;
+    barrier();
+
+    if (gl_SubgroupInvocationID == 0u) {
+        float old = wgSum;
+        wgSum = old + sgSum;
+    }
+    barrier();
+
+    if (lid == 0u) partialSums[wgid] = wgSum;
+
+    if (gid == 0u) {
+        subgroupSize  = gl_SubgroupSize;
+        subgroupCount = gl_NumSubgroups;
+    }
+}

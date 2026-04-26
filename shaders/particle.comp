@@ -1,0 +1,60 @@
+#version 450
+// ═══════════════════════════════════════════════════════════════════════════
+// 计算着色器：粒子系统物理更新
+//
+// 工作组（Workgroup）配置：
+//   local_size_x = 256 → 每个 workgroup 处理 256 个粒子
+//   总粒子数 = 8192 → 需要 dispatch(8192/256, 1, 1) = dispatch(32, 1, 1)
+//
+// 每帧：
+//   读取粒子当前位置和速度
+//   根据 deltaTime 更新位置
+//   碰到边界反弹
+//   写回新状态
+// ═══════════════════════════════════════════════════════════════════════════
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+// 粒子数据结构（与 CPU 端 Particle struct 内存布局完全对齐）
+struct Particle {
+    vec2 position;   // NDC 坐标 [-1, 1]
+    vec2 velocity;   // 速度（NDC/秒）
+    vec4 color;      // RGBA 颜色
+};
+
+// SSBO（Shader Storage Buffer Object）—— 读写存储缓冲
+// std140/std430 布局：确保 CPU-GPU 内存对齐一致
+// binding=0：粒子数据（本帧读+写，in-place update）
+layout(std140, binding = 0) buffer ParticleSSBO {
+    Particle particles[];
+};
+
+// Push Constant：每帧从 CPU 推送的少量数据（速度快，无需描述符）
+layout(push_constant) uniform PushConstants {
+    float deltaTime;   // 帧时间（秒）
+} pc;
+
+void main()
+{
+    // gl_GlobalInvocationID.x：此线程在全局中的唯一索引
+    // 每个线程负责一个粒子
+    uint i = gl_GlobalInvocationID.x;
+
+    // 防止越界（粒子数不整除 local_size 时可能触发）
+    if (i >= particles.length()) return;
+
+    // 读取当前状态
+    vec2 pos = particles[i].position;
+    vec2 vel = particles[i].velocity;
+
+    // 更新位置（牛顿积分）
+    pos += vel * pc.deltaTime;
+
+    // 边界反弹（NDC 空间 [-1, 1]）
+    if (pos.x <= -1.0 || pos.x >= 1.0) { vel.x = -vel.x; pos.x = clamp(pos.x, -1.0, 1.0); }
+    if (pos.y <= -1.0 || pos.y >= 1.0) { vel.y = -vel.y; pos.y = clamp(pos.y, -1.0, 1.0); }
+
+    // 写回（GPU 线程写操作：原子性由 SSBO 语义保证，各线程写不同元素，无竞争）
+    particles[i].position = pos;
+    particles[i].velocity = vel;
+}

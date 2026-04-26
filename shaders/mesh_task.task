@@ -1,0 +1,44 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// 任务着色器（Task Shader）— 第21章
+//
+// Task Shader 是 Mesh Shader 管线的可选第一阶段：
+//   - 每个 task workgroup 负责一个"任务"（通常是一个网格对象）
+//   - 可以对整个对象做剔除（视锥体、遮挡）
+//   - 决定要启动多少个 mesh workgroup
+//   - 通过 EmitMeshTasksEXT() 发起 Mesh Shader 工作
+//
+// 传统管线对比：
+//   Task Shader ≈ Amplification Shader (DX12)
+//   用途：GPU 端的 LOD 选择、视锥体剔除
+// ═══════════════════════════════════════════════════════════════════════════
+#version 450
+#extension GL_EXT_mesh_shader : require
+
+// 每个 task workgroup 处理 1 个任务
+layout(local_size_x = 1) in;
+
+// 传递给 Mesh Shader 的 payload（每个任务的数据）
+struct TaskPayload {
+    uint baseInstanceIndex;  // 当前对象的起始实例索引
+    uint lod;                // 选择的 LOD 级别
+};
+
+taskPayloadSharedEXT TaskPayload payload;
+
+layout(push_constant) uniform PC {
+    mat4 viewProjection;
+    vec4 cameraPos;
+} pc;
+
+void main()
+{
+    uint taskIndex = gl_GlobalInvocationID.x;
+
+    // 简化示例：直接决定启动多少 mesh workgroup
+    // 真实项目中可以在这里做视锥体剔除，不需要渲染的对象不启动任何 mesh workgroup
+    payload.baseInstanceIndex = taskIndex;
+    payload.lod = 0u;   // 简化：始终使用 LOD 0
+
+    // 发起 Mesh Shader 工作：启动 1 个 workgroup（处理 1 个网格）
+    EmitMeshTasksEXT(1u, 1u, 1u);
+}

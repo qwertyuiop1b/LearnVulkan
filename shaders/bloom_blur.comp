@@ -1,0 +1,38 @@
+#version 450
+// Gaussian Blur 计算着色器（两遍：水平 + 垂直）
+// 用于 Bloom 泛光效果
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly  image2D inputImage;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D outputImage;
+
+layout(push_constant) uniform PC {
+    int   horizontal;   // 1=水平方向, 0=垂直方向
+    float strength;     // Bloom 强度
+} pc;
+
+// 5-tap Gaussian kernel（权重归一化）
+const float weights[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+
+void main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size  = imageSize(inputImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec3 result = imageLoad(inputImage, coord).rgb * weights[0];
+
+    ivec2 dir = (pc.horizontal == 1) ? ivec2(1, 0) : ivec2(0, 1);
+
+    for (int i = 1; i < 5; ++i) {
+        // 正方向采样
+        ivec2 c1 = clamp(coord + dir * i, ivec2(0), size - 1);
+        result += imageLoad(inputImage, c1).rgb * weights[i];
+        // 反方向采样
+        ivec2 c2 = clamp(coord - dir * i, ivec2(0), size - 1);
+        result += imageLoad(inputImage, c2).rgb * weights[i];
+    }
+
+    imageStore(outputImage, coord, vec4(result * pc.strength, 1.0));
+}
