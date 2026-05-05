@@ -1,16 +1,17 @@
 #pragma once
 
-#include "Qdevice.hpp"
-#include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "Qdevice.hpp"
+#include "vulkan/vulkan_core.h"
 
 namespace q_vulkan {
 
 struct PipelineConfigInfo {
     VkViewport viewport;
-    VkRect2D scissor; 
+    VkRect2D scissor;
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
     VkPipelineRasterizationStateCreateInfo rasterizationInfo;
     VkPipelineMultisampleStateCreateInfo multisampleInfo;
@@ -24,7 +25,8 @@ struct PipelineConfigInfo {
 
 class QPipeline {
 public:
-    QPipeline(QDevice& device, const std::string& vertPath, const std::string& fragPath, const PipelineConfigInfo& pipelineInfo);
+    QPipeline(QDevice& device, const std::string& vertPath, const std::string& fragPath,
+              const PipelineConfigInfo& pipelineInfo);
 
     ~QPipeline();
 
@@ -51,4 +53,4 @@ private:
     VkShaderModule vertShaderModule;
     VkShaderModule fragShaderModule;
 };
-};
+};  // namespace q_vulkan

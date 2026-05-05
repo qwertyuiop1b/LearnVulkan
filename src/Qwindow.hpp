@@ -1,8 +1,9 @@
 #pragma once
 
-#include "vulkan/vulkan_core.h"
 #include <cstdint>
 #include <string>
+
+#include "vulkan/vulkan_core.h"
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
@@ -17,7 +18,7 @@ public:
 
     QWindow(const QWindow&) = delete;
 
-    void operator=(const QWindow&) = delete; 
+    void operator=(const QWindow&) = delete;
 
     void createWindowSurface(VkInstance instance, VkSurfaceKHR* surface);
 
@@ -36,4 +37,4 @@ private:
     void initWindow();
 };
 
-};
+};  // namespace q_vulkan
