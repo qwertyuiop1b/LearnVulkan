@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(LearnVulkan VERSION 1.0.0 LANGUAGES CXX)
 
+option(BUILD_DEMO "Build demo application" OFF)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -18,6 +20,11 @@ add_subdirectory(external/glfw)
 FILE(GLOB_RECURSE SOURCE_FILES src/*.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+
+if(BUILD_DEMO)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE BUILD_DEMO)
+endif()
+
 target_include_directories(${PROJECT_NAME} PUBLIC 
     include
     ${Vulkan_INCLUDE_DIRS}

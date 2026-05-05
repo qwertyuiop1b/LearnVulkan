@@ -6,7 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 
-#include "vulkan/vulkan_core.h"
+#include <vulkan/vulkan_core.h>
 
 namespace q_vulkan {
 
