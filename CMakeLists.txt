@@ -15,7 +15,9 @@ message(STATUS "Vulkan_TOOLS_DIR: ${Vulkan_TOOLS_DIR}")
 
 add_subdirectory(external/glfw)
 
-add_executable(${PROJECT_NAME} src/main.cpp)
+FILE(GLOB_RECURSE SOURCE_FILES src/*.cpp)
+
+add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC 
     include
     ${Vulkan_INCLUDE_DIRS}
@@ -24,4 +26,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${Vulkan_LIBRARIES}
     glfw
 )
+
+# Copy shaders directory to build directory
+# add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy_directory
+#     ${CMAKE_SOURCE_DIR}/shaders
+#     $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
+#     COMMENT "Copying shaders to build directory"
+# )
 
