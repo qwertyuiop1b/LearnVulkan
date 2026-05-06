@@ -263,8 +263,10 @@ std::vector<const char *> QDevice::getRequiredExtensions() {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
-    // macOS portability support
+    // macOS (MoltenVK): enumerate portability devices
+#ifdef __APPLE__
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+#endif
 
     return extensions;
 }

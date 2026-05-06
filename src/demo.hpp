@@ -2,8 +2,10 @@
 
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <vector>
 #include "vulkan/vk_platform.h"
+#include <sys/types.h>
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -37,7 +39,7 @@ static VkResult CreateDebugUtilsMessengerEXT(
     const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, 
     const VkAllocationCallbacks* pAllocator, 
     VkDebugUtilsMessengerEXT* pDebugMessenger
-)  {
+) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
@@ -57,6 +59,11 @@ static void DestroyDebugUtilsMessengerEXT(
     }
 }
 
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+    bool isComplete() { return graphicsFamily.has_value(); }
+};
+
 
 class Demo {
 public:
@@ -68,6 +75,7 @@ public:
 
 private:
     void initWindow();
+
 
     std::vector<const char*> getRequiredExtensions();
 
@@ -84,6 +92,14 @@ private:
 
     void createInstance();
 
+    bool isDeviceSuitable(VkPhysicalDevice device);
+
+    void pickPhysicalDevice();
+
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+
+    void createLogicalDevice();
+
     void initVulkan();
 
     void mainLoop();
@@ -93,4 +109,7 @@ private:
     GLFWwindow* window;
     VkInstance instance;
     VkDebugUtilsMessengerEXT debugMessenger;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    VkDevice device;
+    VkQueue graphicsQueue;
 };
