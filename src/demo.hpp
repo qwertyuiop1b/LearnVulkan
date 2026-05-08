@@ -4,8 +4,10 @@
 #include <vulkan/vulkan_core.h>
 
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 #include <vector>
 
 #include "vulkan/vk_platform.h"
@@ -65,6 +67,19 @@ struct SwapChainSupportDetail {
     std::vector<VkPresentModeKHR> presentModes;
 };
 
+static std::vector<char> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filename);
+    }
+    size_t fileSize = file.tellg();
+    std::vector<char> buffer(fileSize);
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+    return buffer;
+}
+
 class Demo {
 public:
     Demo();
@@ -113,6 +128,12 @@ private:
 
     void createSwapchain();
 
+    VkShaderModule  createShaderModule(const std::vector<char>& code);
+
+    void createGraphicsPipeline();
+
+    void createRenderPass();
+
     void initVulkan();
 
     void mainLoop();
@@ -133,4 +154,8 @@ private:
     VkFormat swapchainImageFormat;
     VkExtent2D swapchainExtent;
     std::vector<VkImageView> swapchainImageViews;
+
+    VkPipelineLayout pipelineLayout;
+    VkRenderPass renderPass;
+    VkPipeline graphicsPipeline;
 };
