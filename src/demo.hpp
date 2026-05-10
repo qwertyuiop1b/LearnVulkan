@@ -151,6 +151,10 @@ private:
 
     void drawFrame();
 
+    void cleanupSwapchain();
+
+    void recreateSwapchain();
+
     void cleanup();
 
     GLFWwindow* window;
@@ -182,4 +186,7 @@ private:
     std::vector<VkFence> imagesInFlight;
 
     uint32_t currentFrame = 0;
+
+public:
+    bool framebufferResized = false;
 };
