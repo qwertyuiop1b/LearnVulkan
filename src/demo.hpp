@@ -18,6 +18,7 @@
 static const uint32_t WIDTH = 800;
 static const uint32_t HEIGHT = 600;
 static const char* TITLE = "Vulkan Demo";
+static const int MAX_FRAMES_IN_FLIGHT = 2;
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
@@ -134,9 +135,21 @@ private:
 
     void createRenderPass();
 
+    void createFramebuffers();
+
+    void createCommandPool();
+
+    void createCommandBuffers();
+
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+    void createSyncObjects();
+
     void initVulkan();
 
     void mainLoop();
+
+    void drawFrame();
 
     void cleanup();
 
@@ -158,4 +171,15 @@ private:
     VkPipelineLayout pipelineLayout;
     VkRenderPass renderPass;
     VkPipeline graphicsPipeline;
+
+    std::vector<VkFramebuffer> swapchainFramebuffers;
+    VkCommandPool commandPool;
+
+    std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
+    std::vector<VkFence> imagesInFlight;
+
+    uint32_t currentFrame = 0;
 };
