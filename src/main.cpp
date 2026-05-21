@@ -1,4 +1,5 @@
 #include "common/common.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -13,6 +14,7 @@
 
 #include <vulkan/vulkan.h>
 
+const int MAX_FRAMES_IN_FLIGHT = 2;
 
 class App 
 {
@@ -28,6 +30,17 @@ public:
 
     ~App()
     {
+        for (size_t i = 0; i < imageAvailableSemaphores.size(); i++) 
+        {
+            vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
+            vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);
+        }
+
+        for (size_t i = 0; i < inFlightFences.size(); i++)
+        {
+            vkDestroyFence(device, inFlightFences[i], nullptr);
+        }
+
         vkDestroyCommandPool(device, commandPool, nullptr);
         for (auto framebuffer : swapchainFramebuffers) 
         {
@@ -56,7 +69,9 @@ public:
     {
         while(!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            drawFrame();
         }
+        vkDeviceWaitIdle(device);
     }
 
 private:
@@ -89,7 +104,14 @@ private:
     std::vector<VkFramebuffer> swapchainFramebuffers;
 
     VkCommandPool commandPool;
-    VkCommandBuffer commandBuffer;
+    std::vector<VkCommandBuffer> commandBuffers;
+
+    std::vector<VkSemaphore> imageAvailableSemaphores;
+    std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkFence> inFlightFences;
+    std::vector<VkFence> imagesInFlights;
+
+    uint32_t currentFrame = 0;
 
     void initWindow() 
     {
@@ -456,6 +478,16 @@ private:
         renderpassInfo.attachmentCount = 1;
         renderpassInfo.pAttachments = &colorAttachment;
         VK_CHECK(vkCreateRenderPass(device, &renderpassInfo, nullptr, &renderpass));
+
+        VkSubpassDependency dependency{};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        renderpassInfo.dependencyCount = 1;
+        renderpassInfo.pDependencies = &dependency;
         
     }
 
@@ -639,15 +671,16 @@ private:
         VK_CHECK(vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool));
     }
 
-    void createCommandBuffer()
+    void createCommandBuffers()
     {
+        commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         VkCommandBufferAllocateInfo allocInfo {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.commandPool = commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = 1;
+        allocInfo.commandBufferCount = commandBuffers.size();
 
-        VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer));
+        VK_CHECK(vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()));
     }
 
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
@@ -691,6 +724,35 @@ private:
 
     }
 
+    void createSyncObjects()
+    {
+        const uint32_t swapchainImagesCount = swapchainImages.size();
+        imageAvailableSemaphores.resize(swapchainImagesCount);
+        renderFinishedSemaphores.resize(swapchainImagesCount);
+        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+        imagesInFlights.resize(swapchainImagesCount, VK_NULL_HANDLE);
+
+        VkSemaphoreCreateInfo semaphoreInfo {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+        VkFenceCreateInfo fenceInfo {};
+        fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+
+        for (size_t i = 0; i < swapchainImagesCount; i++)
+        {
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]));
+            VK_CHECK(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]));
+            
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            VK_CHECK(vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]));
+        }
+
+        
+    }
+
     void initVulkan()
     {
         createInstance();
@@ -704,9 +766,60 @@ private:
         createGraphicsPipeline();
         createFramebuffer();
         createCommandPool();
-        createCommandBuffer();
+        createCommandBuffers();
+        createSyncObjects();
     }
 
+    void drawFrame() 
+    {
+        vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+        if (imagesInFlights[imageIndex] != VK_NULL_HANDLE)
+        {
+            vkWaitForFences(device, 1, &imagesInFlights[imageIndex], VK_TRUE, UINT64_MAX);
+        }
+        imagesInFlights[imageIndex] = inFlightFences[currentFrame];
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
+
+        vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+        recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+        VkSubmitInfo submitInfo {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[imageIndex] };
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        VK_CHECK(vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]));
+
+        VkPresentInfoKHR presentInfo{};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapchains[] = {swapchain};
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapchains;
+        presentInfo.pImageIndices = &imageIndex;
+        presentInfo.pResults = nullptr;
+        vkQueuePresentKHR(presentQueue, &presentInfo);
+        
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
 };
 
 
