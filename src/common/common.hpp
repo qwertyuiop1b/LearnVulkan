@@ -48,6 +48,28 @@ const std::vector<const char*> DEVICE_EXTENSIONS =
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
+static std::vector<const char*> getRequiredDeviceExtensions(VkPhysicalDevice device)
+{
+    std::vector<const char*> extensions = DEVICE_EXTENSIONS;
+    
+    // Check for VK_KHR_portability_subset support (required on macOS)
+    uint32_t extensionCount;
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+    std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+    
+    for (const auto& ext : availableExtensions)
+    {
+        if (strcmp(ext.extensionName, "VK_KHR_portability_subset") == 0)
+        {
+            extensions.push_back("VK_KHR_portability_subset");
+            break;
+        }
+    }
+    
+    return extensions;
+}
+
 static bool checkValidationLayerSupport() 
 {
     uint32_t layerCount;
@@ -103,12 +125,32 @@ static bool checkDeviceExtensionSupport(VkPhysicalDevice device)
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, extensions.data());
 
     std::set<std::string> requiredExtensions(DEVICE_EXTENSIONS.begin(), DEVICE_EXTENSIONS.end());
+    
+    // Check which available extensions we have
+    std::set<std::string> availableExtensionNames;
+    bool hasPortabilitySubset = false;
     for (const auto& extension : extensions) 
     {
-        requiredExtensions.erase(extension.extensionName);
+        availableExtensionNames.insert(extension.extensionName);
+        if (strcmp(extension.extensionName, "VK_KHR_portability_subset") == 0)
+        {
+            hasPortabilitySubset = true;
+        }
     }
-
-    return requiredExtensions.empty();
+    
+    // Check required extensions are available
+    for (const auto& requiredExt : DEVICE_EXTENSIONS)
+    {
+        if (availableExtensionNames.find(requiredExt) == availableExtensionNames.end())
+        {
+            return false;
+        }
+    }
+    
+    // If portability subset is available, it must be enabled
+    // This is enforced in getRequiredDeviceExtensions
+    
+    return true;
 }
 
 struct SwapchainSupportDetails 
