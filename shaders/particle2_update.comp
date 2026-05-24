@@ -1,0 +1,110 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec4 position;   // xyz=pos, w=lifetime(当前)
+    vec4 velocity;   // xyz=vel, w=maxLifetime
+    vec4 color;      // rgba
+    float size;
+    float pad[3];
+};
+
+layout(set = 0, binding = 0) buffer ParticleSSBO {
+    Particle particles[];
+};
+
+// 发射器描述（多个发射器打包在一个 UBO 中）
+struct Emitter {
+    vec4 position;     // xyz=世界坐标, w=emitType(0=点,1=锥)
+    vec4 direction;    // xyz=朝向, w=spread(弧度)
+    vec4 colorMin;
+    vec4 colorMax;
+    float speed;
+    float speedVariance;
+    float lifetime;
+    float lifetimeVariance;
+    float size;
+    float emitRate;    // 粒子/秒（本 Compute 不用，仅 CPU 控制）
+    float pad[2];
+};
+
+layout(set = 0, binding = 1) uniform EmitterUBO {
+    Emitter emitters[4];
+    int     emitterCount;
+    float   deltaTime;
+    float   time;
+    uint    randomSeed;
+} ubo;
+
+// 简单 PRNG（PCG hash）
+uint pcg(uint v)
+{
+    uint state = v * 747796405u + 2891336453u;
+    uint word  = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float randFloat(inout uint seed)
+{
+    seed = pcg(seed);
+    return float(seed) / float(0xFFFFFFFFu);
+}
+
+vec3 randInCone(vec3 dir, float spread, inout uint seed)
+{
+    float phi   = randFloat(seed) * 6.28318;
+    float theta = randFloat(seed) * spread;
+    vec3 up     = abs(dir.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 right  = normalize(cross(up, dir));
+    vec3 upDir  = cross(dir, right);
+    float sinT  = sin(theta);
+    return normalize(dir * cos(theta) + right * cos(phi) * sinT + upDir * sin(phi) * sinT);
+}
+
+void main()
+{
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= particles.length()) return;
+
+    Particle p = particles[idx];
+    uint seed  = ubo.randomSeed + idx * 1973u + uint(ubo.time * 1000.0) * 9301u;
+
+    if (p.position.w <= 0.0) {
+        // 粒子已死亡 → 重生
+        int ei = int(randFloat(seed) * float(ubo.emitterCount)) % ubo.emitterCount;
+        Emitter e = ubo.emitters[ei];
+
+        // 位置
+        p.position.xyz = e.position.xyz;
+        // 速度方向
+        vec3 dir = normalize(e.direction.xyz);
+        float spread = e.direction.w;
+        if (int(e.position.w) == 1) {  // 锥形
+            dir = randInCone(dir, spread, seed);
+        }
+        float speed = e.speed + (randFloat(seed) * 2.0 - 1.0) * e.speedVariance;
+        p.velocity.xyz = dir * speed;
+        // 寿命
+        float lt = e.lifetime + (randFloat(seed) * 2.0 - 1.0) * e.lifetimeVariance;
+        p.position.w = lt;
+        p.velocity.w = lt;
+        // 颜色
+        float t = randFloat(seed);
+        p.color = mix(e.colorMin, e.colorMax, t);
+        p.size  = e.size * (0.5 + randFloat(seed) * 0.5);
+    } else {
+        // 更新位置 + 寿命
+        vec3 gravity   = vec3(0.0, -2.5, 0.0);
+        p.velocity.xyz += gravity * ubo.deltaTime;
+        p.position.xyz += p.velocity.xyz * ubo.deltaTime;
+        p.position.w   -= ubo.deltaTime;
+
+        // 随寿命渐淡
+        float lifeRatio = p.position.w / max(p.velocity.w, 0.001);
+        p.color.a = lifeRatio;
+        p.size *= mix(0.98, 1.0, lifeRatio);
+    }
+
+    particles[idx] = p;
+}

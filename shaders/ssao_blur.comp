@@ -1,0 +1,30 @@
+#version 450
+// SSAO 双边模糊（第46章）
+// 在保留边缘的同时平滑 AO 噪声
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, r8) uniform readonly  image2D aoInput;
+layout(set = 0, binding = 1, r8) uniform writeonly image2D aoOutput;
+
+void main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size  = imageSize(aoInput);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    float center = imageLoad(aoInput, coord).r;
+    float result = 0.0;
+    float weightSum = 0.0;
+    for (int x = -2; x <= 2; ++x) {
+        for (int y = -2; y <= 2; ++y) {
+            ivec2 c = clamp(coord + ivec2(x, y), ivec2(0), size - 1);
+            float v = imageLoad(aoInput, c).r;
+            float w = exp(-float(x * x + y * y) * 0.5);
+            float edgeW = exp(-abs(v - center) * 20.0);
+            result += v * w * edgeW;
+            weightSum += w * edgeW;
+        }
+    }
+    imageStore(aoOutput, coord, vec4(result / weightSum, 0.0, 0.0, 1.0));
+}

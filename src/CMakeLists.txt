@@ -175,3 +175,133 @@ compile_shaders(ch36_gpl)
 add_executable(ch37_conditional_rendering chapters/ch37_conditional_rendering.cpp)
 target_link_libraries(ch37_conditional_rendering PRIVATE vulkan_tutorial_common)
 compile_shaders(ch37_conditional_rendering)
+
+# ─── Chapter 38: Alpha Blending ──────────────────────────────────────────────
+add_executable(ch38_alpha_blend chapters/ch38_alpha_blend.cpp)
+target_link_libraries(ch38_alpha_blend PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch38_alpha_blend)
+
+# ─── Chapter 39: Stencil Buffer ──────────────────────────────────────────────
+add_executable(ch39_stencil chapters/ch39_stencil.cpp)
+target_link_libraries(ch39_stencil PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch39_stencil)
+
+# ─── Chapter 40: Normal Mapping ──────────────────────────────────────────────
+add_executable(ch40_normal_mapping chapters/ch40_normal_mapping.cpp)
+target_link_libraries(ch40_normal_mapping PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch40_normal_mapping)
+
+# ─── Chapter 41: Cubemap Skybox ──────────────────────────────────────────────
+add_executable(ch41_skybox chapters/ch41_skybox.cpp)
+target_link_libraries(ch41_skybox PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch41_skybox)
+
+# ─── Chapter 42: Image-Based Lighting ────────────────────────────────────────
+add_executable(ch42_ibl chapters/ch42_ibl.cpp)
+target_link_libraries(ch42_ibl PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch42_ibl)
+
+# ─── Chapter 43: glTF Loading ────────────────────────────────────────────────
+add_executable(ch43_gltf chapters/ch43_gltf.cpp)
+target_link_libraries(ch43_gltf PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch43_gltf)
+
+# ─── Chapter 44: PBR Rendering ───────────────────────────────────────────────
+add_executable(ch44_pbr chapters/ch44_pbr.cpp)
+target_link_libraries(ch44_pbr PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch44_pbr)
+
+# ─── Chapter 45: Cascaded Shadow Maps ────────────────────────────────────────
+add_executable(ch45_csm chapters/ch45_csm.cpp)
+target_link_libraries(ch45_csm PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch45_csm)
+
+# ─── Chapter 46: SSAO ────────────────────────────────────────────────────────
+add_executable(ch46_ssao chapters/ch46_ssao.cpp)
+target_link_libraries(ch46_ssao PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch46_ssao)
+
+# ─── Chapter 47: Screen Space Reflections ────────────────────────────────────
+add_executable(ch47_ssr chapters/ch47_ssr.cpp)
+target_link_libraries(ch47_ssr PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch47_ssr)
+
+# ─── Chapter 48: Weighted Blended OIT ────────────────────────────────────────
+add_executable(ch48_oit chapters/ch48_oit.cpp)
+target_link_libraries(ch48_oit PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch48_oit)
+
+# ─── Chapter 49: Temporal Anti-Aliasing ──────────────────────────────────────
+add_executable(ch49_taa chapters/ch49_taa.cpp)
+target_link_libraries(ch49_taa PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch49_taa)
+
+# ─── Chapter 50: Skeletal Animation ──────────────────────────────────────────
+add_executable(ch50_skinning chapters/ch50_skinning.cpp)
+target_link_libraries(ch50_skinning PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+compile_shaders(ch50_skinning)
+
+# ─── Chapter 51: Render Graph ────────────────────────────────────────────────
+add_executable(ch51_render_graph chapters/ch51_render_graph.cpp)
+target_link_libraries(ch51_render_graph PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_render_graph)
+compile_shaders(ch51_render_graph)
+
+# ─── Chapter 52: GPU Particles ───────────────────────────────────────────────
+add_executable(ch52_particles chapters/ch52_particles.cpp)
+target_link_libraries(ch52_particles PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive)
+compile_shaders(ch52_particles)
+
+# ─── Chapter 53: Water Rendering ─────────────────────────────────────────────
+add_executable(ch53_water chapters/ch53_water.cpp)
+target_link_libraries(ch53_water PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive)
+compile_shaders(ch53_water)
+
+# ─── Chapter 54: Volumetric Fog ──────────────────────────────────────────────
+add_executable(ch54_volumetric_fog chapters/ch54_volumetric_fog.cpp)
+target_link_libraries(ch54_volumetric_fog PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive)
+compile_shaders(ch54_volumetric_fog)
+
+# ─── Chapter 55: Screen-Space Decal (source generated by agent) ──────────────
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch55_decal.cpp)
+    add_executable(ch55_decal chapters/ch55_decal.cpp)
+    target_link_libraries(ch55_decal PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+    compile_shaders(ch55_decal)
+endif()
+
+# ─── Chapter 56: Async Texture Loading ───────────────────────────────────────
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch56_async_loading.cpp)
+    add_executable(ch56_async_loading chapters/ch56_async_loading.cpp)
+    target_link_libraries(ch56_async_loading PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+    compile_shaders(ch56_async_loading)
+endif()
+
+# ─── Chapter 57: Parallel Command Recording ──────────────────────────────────
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch57_parallel_record.cpp)
+    add_executable(ch57_parallel_record chapters/ch57_parallel_record.cpp)
+    target_link_libraries(ch57_parallel_record PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+    compile_shaders(ch57_parallel_record)
+endif()
+
+# ─── Chapter 58: PCSS Soft Shadows ───────────────────────────────────────────
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch58_pcss.cpp)
+    add_executable(ch58_pcss chapters/ch58_pcss.cpp)
+    target_link_libraries(ch58_pcss PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+    compile_shaders(ch58_pcss)
+endif()
+
+# ─── Chapter 59: Reflection Probe ────────────────────────────────────────────
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch59_reflection_probe.cpp)
+    add_executable(ch59_reflection_probe chapters/ch59_reflection_probe.cpp)
+    target_link_libraries(ch59_reflection_probe PRIVATE vulkan_tutorial_common vulkan_tutorial_assets vulkan_tutorial_interactive)
+    compile_shaders(ch59_reflection_probe)
+endif()
+
+# ─── Chapter 60: Outdoor Demo ────────────────────────────────────────────────
+add_executable(ch60_outdoor_demo chapters/ch60_outdoor_demo.cpp)
+target_link_libraries(ch60_outdoor_demo PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_render_graph)
+compile_shaders(ch60_outdoor_demo)

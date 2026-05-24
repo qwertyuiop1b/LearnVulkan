@@ -34,6 +34,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+#include <vulkan/vulkan_core.h>
 #include <vulkan_tutorial/utils.hpp>
 #include <iostream>
 #include <stdexcept>
@@ -96,7 +97,7 @@ private:
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName        = "No Engine";
         appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion         = VK_API_VERSION_1_3;
+        appInfo.apiVersion         = VK_API_VERSION_1_4;
 
         // ② 获取所需扩展（GLFW 需要的窗口扩展 + 调试扩展 + macOS 扩展）
         auto extensions = getRequiredInstanceExtensions();
@@ -109,7 +110,9 @@ private:
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         // macOS + MoltenVK 必须设置此标志，允许枚举非完全符合规范的物理设备
+#ifdef __APPLE__
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
         // ④ 配置验证层
         //   注意：在 pNext 中传入 debugCreateInfo，可以捕获

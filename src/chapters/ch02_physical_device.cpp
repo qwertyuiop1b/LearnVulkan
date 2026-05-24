@@ -185,7 +185,9 @@ private:
         ci.pApplicationInfo        = &appInfo;
         ci.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
         ci.ppEnabledExtensionNames = extensions.data();
+#ifdef __APPLE__
         ci.flags                  |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount   = static_cast<uint32_t>(VALIDATION_LAYERS.size());

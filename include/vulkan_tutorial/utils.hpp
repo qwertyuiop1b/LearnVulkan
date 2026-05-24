@@ -50,7 +50,9 @@ inline const std::vector<const char*> VALIDATION_LAYERS = {
 inline const std::vector<const char*> DEVICE_EXTENSIONS = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     // macOS 上 MoltenVK 需要以下扩展
-    "VK_KHR_portability_subset"
+#ifdef __APPLE__
+    "VK_KHR_portability_subset",
+#endif
 };
 
 // ─── 调试信使 ──────────────────────────────────────────────────────────────────
@@ -127,8 +129,10 @@ inline std::vector<const char*> getRequiredInstanceExtensions()
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     // macOS / MoltenVK 需要的扩展
+#ifdef __APPLE__
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#endif
 
     return extensions;
 }

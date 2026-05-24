@@ -81,7 +81,44 @@ target_compile_definitions(vulkan_tutorial_common INTERFACE
     GLFW_INCLUDE_NONE          # Do not let GLFW include GL headers
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
-    SHADER_DIR="${CMAKE_BINARY_DIR}/shaders")
+    SHADER_DIR="${CMAKE_BINARY_DIR}/shaders"
+    ASSET_DIR="${CMAKE_SOURCE_DIR}/assets")
+
+# ─── Asset loading library (stb_image + cgltf) ───────────────────────────────
+add_library(vulkan_tutorial_assets STATIC
+    src/common/stb_image_impl.cpp
+    src/common/cgltf_impl.cpp
+    src/common/gltf_loader.cpp)
+target_include_directories(vulkan_tutorial_assets PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/external/stb
+    ${CMAKE_SOURCE_DIR}/external/cgltf)
+target_link_libraries(vulkan_tutorial_assets PUBLIC vulkan_tutorial_common glm::glm)
+
+add_library(vulkan_tutorial_interactive STATIC
+    external/imgui/imgui.cpp
+    external/imgui/imgui_draw.cpp
+    external/imgui/imgui_tables.cpp
+    external/imgui/imgui_widgets.cpp
+    external/imgui/backends/imgui_impl_glfw.cpp
+    external/imgui/backends/imgui_impl_vulkan.cpp
+    src/common/interactive_chapter.cpp)
+target_include_directories(vulkan_tutorial_interactive PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/external/imgui
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends)
+target_link_libraries(vulkan_tutorial_interactive PUBLIC
+    vulkan_tutorial_common
+    vulkan_tutorial_assets
+    glm::glm)
+
+# ─── Render Graph library (ch51+) ────────────────────────────────────────────
+add_library(vulkan_tutorial_render_graph STATIC
+    src/common/render_graph.cpp)
+target_include_directories(vulkan_tutorial_render_graph PUBLIC
+    ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(vulkan_tutorial_render_graph PUBLIC
+    vulkan_tutorial_common)
 
 # ─── Chapters ─────────────────────────────────────────────────────────────────
 add_subdirectory(src)
