@@ -10,6 +10,9 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "")
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "")
 add_subdirectory(external/glfw)
 
+# glm
+add_subdirectory(external/glm)
+
 # vulkan
 find_package(Vulkan REQUIRED)
 
@@ -21,6 +24,7 @@ target_include_directories(
     ${PROJECT_NAME} PRIVATE 
     ${Vulkan_INCLUDE_DIRS}
     external/glfw/include
+    external/glm
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw Vulkan::Vulkan)
 

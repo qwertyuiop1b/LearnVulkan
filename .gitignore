@@ -21,6 +21,7 @@
 *.obj
 *.dll
 *.exe
+*.spv
 
 
 build
