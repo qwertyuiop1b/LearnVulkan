@@ -21,10 +21,12 @@ target_link_libraries(ch05_renderpass PRIVATE vulkan_tutorial_common)
 # ─── Chapter 06: Graphics Pipeline ───────────────────────────────────────────
 add_executable(ch06_pipeline chapters/ch06_pipeline.cpp)
 target_link_libraries(ch06_pipeline PRIVATE vulkan_tutorial_common)
+compile_shaders(ch06_pipeline)
 
 # ─── Chapter 07: Framebuffers & Command Buffers ───────────────────────────────
 add_executable(ch07_commands chapters/ch07_commands.cpp)
 target_link_libraries(ch07_commands PRIVATE vulkan_tutorial_common)
+compile_shaders(ch07_commands)
 
 # ─── Chapter 08: Render Loop (DRAW TRIANGLE!) ────────────────────────────────
 add_executable(ch08_triangle chapters/ch08_triangle.cpp)
@@ -305,6 +307,34 @@ add_executable(ch60_outdoor_demo chapters/ch60_outdoor_demo.cpp)
 target_link_libraries(ch60_outdoor_demo PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
     vulkan_tutorial_interactive vulkan_tutorial_render_graph)
 compile_shaders(ch60_outdoor_demo)
+
+# ─── ch71-ch83 新章节 ────────────────────────────────────────────────────────
+macro(add_advanced_chapter num name)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/${name}.cpp)
+        add_executable(${name} chapters/${name}.cpp)
+        target_link_libraries(${name} PRIVATE
+            vulkan_tutorial_common
+            vulkan_tutorial_assets
+            vulkan_tutorial_interactive
+            vulkan_tutorial_engine)
+        compile_shaders(${name})
+    endif()
+endmacro()
+
+add_advanced_chapter(71 ch71_depth_of_field)
+add_advanced_chapter(72 ch72_motion_blur)
+add_advanced_chapter(73 ch73_atmospheric_scattering)
+add_advanced_chapter(74 ch74_ssgi)
+add_advanced_chapter(75 ch75_lut_color_grading)
+add_advanced_chapter(76 ch76_clustered_forward)
+add_advanced_chapter(77 ch77_virtual_texture)
+add_advanced_chapter(78 ch78_async_compute)
+add_advanced_chapter(79 ch79_terrain_lod)
+add_advanced_chapter(80 ch80_vegetation)
+add_advanced_chapter(81 ch81_descriptor_buffer)
+add_advanced_chapter(82 ch82_device_generated_commands)
+add_advanced_chapter(83 ch83_restir)
+add_advanced_chapter(84 ch84_toon_rendering)
 
 # ─── Engine chapters macro ────────────────────────────────────────────────────
 # 使用宏简化重复注册
