@@ -305,3 +305,40 @@ add_executable(ch60_outdoor_demo chapters/ch60_outdoor_demo.cpp)
 target_link_libraries(ch60_outdoor_demo PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
     vulkan_tutorial_interactive vulkan_tutorial_render_graph)
 compile_shaders(ch60_outdoor_demo)
+
+# ─── Engine chapters macro ────────────────────────────────────────────────────
+# 使用宏简化重复注册
+macro(add_engine_chapter num name)
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/${name}.cpp)
+        add_executable(${name} chapters/${name}.cpp)
+        target_link_libraries(${name} PRIVATE
+            vulkan_tutorial_common
+            vulkan_tutorial_assets
+            vulkan_tutorial_interactive
+            vulkan_tutorial_engine)
+        compile_shaders(${name})
+    endif()
+endmacro()
+
+# ─── Chapter 61-70: Engine Chapters ──────────────────────────────────────────
+add_engine_chapter(61 ch61_rhi_device)
+add_engine_chapter(62 ch62_rhi_buffer)
+add_engine_chapter(63 ch63_rhi_texture)
+add_engine_chapter(64 ch64_rhi_shader)
+add_engine_chapter(65 ch65_pipeline_builder)
+add_engine_chapter(66 ch66_descriptor_manager)
+add_engine_chapter(67 ch67_command_recorder)
+add_engine_chapter(68 ch68_scene_ecs)
+add_engine_chapter(69 ch69_material_system)
+
+# ch70 需要 render_graph
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/chapters/ch70_mini_engine.cpp)
+    add_executable(ch70_mini_engine chapters/ch70_mini_engine.cpp)
+    target_link_libraries(ch70_mini_engine PRIVATE
+        vulkan_tutorial_common
+        vulkan_tutorial_assets
+        vulkan_tutorial_interactive
+        vulkan_tutorial_engine
+        vulkan_tutorial_render_graph)
+    compile_shaders(ch70_mini_engine)
+endif()

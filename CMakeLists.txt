@@ -81,6 +81,7 @@ target_compile_definitions(vulkan_tutorial_common INTERFACE
     GLFW_INCLUDE_NONE          # Do not let GLFW include GL headers
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_ENABLE_EXPERIMENTAL    # 允许 GLM 实验性扩展（gtx/euler_angles 等）
     SHADER_DIR="${CMAKE_BINARY_DIR}/shaders"
     ASSET_DIR="${CMAKE_SOURCE_DIR}/assets")
 
@@ -119,6 +120,35 @@ target_include_directories(vulkan_tutorial_render_graph PUBLIC
     ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(vulkan_tutorial_render_graph PUBLIC
     vulkan_tutorial_common)
+
+# ─── Engine library (ch61+) ──────────────────────────────────────────────────
+# 收集 src/engine/ 下所有 .cpp（按需添加）
+set(ENGINE_SOURCES
+    src/engine/rhi_device.cpp
+    src/engine/rhi_buffer.cpp
+    src/engine/rhi_texture.cpp
+    src/engine/rhi_shader.cpp
+    src/engine/pipeline_builder.cpp
+    src/engine/descriptor_manager.cpp
+    src/engine/command_recorder.cpp
+    src/engine/scene_ecs.cpp
+    src/engine/material_system.cpp)
+
+# mini_engine.cpp 由子 Agent 生成，条件包含
+if(EXISTS ${CMAKE_SOURCE_DIR}/src/engine/mini_engine.cpp)
+    list(APPEND ENGINE_SOURCES src/engine/mini_engine.cpp)
+endif()
+
+add_library(vulkan_tutorial_engine STATIC ${ENGINE_SOURCES})
+target_include_directories(vulkan_tutorial_engine PUBLIC
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/external/stb
+    ${CMAKE_SOURCE_DIR}/external/cgltf)
+target_link_libraries(vulkan_tutorial_engine PUBLIC
+    vulkan_tutorial_common
+    vulkan_tutorial_assets
+    vulkan_tutorial_render_graph
+    glm::glm)
 
 # ─── Chapters ─────────────────────────────────────────────────────────────────
 add_subdirectory(src)
