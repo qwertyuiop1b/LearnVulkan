@@ -18,6 +18,7 @@
 #include "rhi_device.hpp"
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -195,9 +196,9 @@ public:
 
 private:
     struct Entry {
-        ProgramDesc                  desc;
-        std::unique_ptr<ShaderProgram> prog;
-        std::vector<int64_t>         timestamps;  // 每个 .spv 的最后修改时间
+        ProgramDesc                    desc;
+        std::unique_ptr<ShaderProgram> program;
+        std::vector<int64_t>           timestamps;  // 每个 .spv 的最后修改时间
     };
 
     RHIDevice*  dev_       = nullptr;

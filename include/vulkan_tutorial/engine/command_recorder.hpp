@@ -12,6 +12,7 @@
  */
 
 #include "rhi_device.hpp"
+#include <algorithm>
 #include <functional>
 #include <vector>
 

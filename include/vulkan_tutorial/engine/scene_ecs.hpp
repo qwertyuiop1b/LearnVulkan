@@ -23,6 +23,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstdint>
 #include <functional>
+#include <stdexcept>
 #include <optional>
 #include <string>
 #include <unordered_map>

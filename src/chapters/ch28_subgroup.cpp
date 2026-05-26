@@ -50,6 +50,7 @@
 #include <vulkan_tutorial/utils.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <iostream>

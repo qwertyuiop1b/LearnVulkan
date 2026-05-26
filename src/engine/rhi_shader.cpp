@@ -384,14 +384,14 @@ void ShaderLibrary::registerProgram(const ProgramDesc& desc)
 {
     Entry entry{};
     entry.desc = desc;
-    entry.prog = std::make_unique<ShaderProgram>();
+    entry.program = std::make_unique<ShaderProgram>();
 
     for (auto& [spvFile, stage] : desc.stages) {
         const std::string fullPath = shaderDir_ + "/" + spvFile;
-        entry.prog->addStage(*dev_, fullPath, stage);
+        entry.program->addStage(*dev_, fullPath, stage);
         entry.timestamps.push_back(getFileTimestamp(fullPath));
     }
-    entry.prog->link(*dev_);
+    entry.program->link(*dev_);
 
     entries_[desc.name] = std::move(entry);
 }
@@ -419,13 +419,13 @@ void ShaderLibrary::registerCompute(const std::string& name,
 ShaderProgram* ShaderLibrary::get(const std::string& name)
 {
     auto it = entries_.find(name);
-    return (it != entries_.end()) ? it->second.prog.get() : nullptr;
+    return (it != entries_.end()) ? it->second.program.get() : nullptr;
 }
 
 const ShaderProgram* ShaderLibrary::get(const std::string& name) const
 {
     auto it = entries_.find(name);
-    return (it != entries_.end()) ? it->second.prog.get() : nullptr;
+    return (it != entries_.end()) ? it->second.program.get() : nullptr;
 }
 
 bool ShaderLibrary::reloadIfDirty(const std::string& name)
@@ -455,9 +455,9 @@ bool ShaderLibrary::reloadIfDirty(const std::string& name)
         entry.timestamps[i] = getFileTimestamp(fullPath);
     }
     newProg->link(*dev_);
-    entry.prog = std::move(newProg);
+    entry.program = std::move(newProg);
 
-    if (onReload_) onReload_(name, entry.prog.get());
+    if (onReload_) onReload_(name, entry.program.get());
     return true;
 }
 

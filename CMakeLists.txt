@@ -6,31 +6,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ─── Vulkan SDK ───────────────────────────────────────────────────────────────
-set(VULKAN_SDK "$ENV{HOME}/VulkanSDK/1.4.328.1/macOS")
-find_package(Vulkan QUIET HINTS "${VULKAN_SDK}")
-if (NOT Vulkan_FOUND)
-    # Fallback: set manually
-    set(Vulkan_INCLUDE_DIRS "${VULKAN_SDK}/include")
-    set(Vulkan_LIBRARIES    "${VULKAN_SDK}/lib/libvulkan.dylib")
-    add_library(Vulkan::Vulkan UNKNOWN IMPORTED)
-    set_target_properties(Vulkan::Vulkan PROPERTIES
-        IMPORTED_LOCATION "${Vulkan_LIBRARIES}"
-        INTERFACE_INCLUDE_DIRECTORIES "${Vulkan_INCLUDE_DIRS}")
-    message(STATUS "Vulkan: using manual path ${VULKAN_SDK}")
-else()
-    message(STATUS "Vulkan: found ${Vulkan_VERSION}")
+find_package(Vulkan REQUIRED)
+
+# ─── Dependencies (git submodules) ────────────────────────────────────────────
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/external/glfw/CMakeLists.txt"
+   OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/glm/CMakeLists.txt"
+   OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/imgui/imgui.cpp")
+    message(FATAL_ERROR "Git submodules not initialized. Run: git submodule update --init --recursive")
 endif()
 
 # ─── GLFW ─────────────────────────────────────────────────────────────────────
-find_package(glfw3 REQUIRED HINTS "/opt/homebrew/lib/cmake/glfw3")
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 
 # ─── GLM ──────────────────────────────────────────────────────────────────────
-find_package(glm REQUIRED HINTS "/opt/homebrew/lib/cmake/glm")
+add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
 # ─── glslc shader compiler ────────────────────────────────────────────────────
-find_program(GLSLC_EXECUTABLE glslc
-    HINTS "${VULKAN_SDK}/bin" "$ENV{HOME}/VulkanSDK/1.4.328.1/macOS/bin"
-    REQUIRED)
+find_program(GLSLC_EXECUTABLE glslc REQUIRED)
 message(STATUS "glslc: ${GLSLC_EXECUTABLE}")
 
 # ─── Compile shaders helper ───────────────────────────────────────────────────

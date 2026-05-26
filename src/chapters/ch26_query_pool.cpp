@@ -46,6 +46,7 @@
 #include <GLFW/glfw3.h>
 #include <vulkan_tutorial/utils.hpp>
 
+#include <array>
 #include <chrono>
 #include <cstring>
 #include <iomanip>
