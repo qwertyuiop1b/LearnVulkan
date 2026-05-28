@@ -335,6 +335,16 @@ add_advanced_chapter(81 ch81_descriptor_buffer)
 add_advanced_chapter(82 ch82_device_generated_commands)
 add_advanced_chapter(83 ch83_restir)
 add_advanced_chapter(84 ch84_toon_rendering)
+add_advanced_chapter(85 ch85_lens_flare)
+add_advanced_chapter(86 ch86_subsurface_scattering)
+add_advanced_chapter(87 ch87_parallax_occlusion)
+add_advanced_chapter(88 ch88_dynamic_weather)
+add_advanced_chapter(89 ch89_navmesh_pathfinding)
+add_advanced_chapter(90 ch90_scene_streaming)
+add_advanced_chapter(91 ch91_physics_integration)
+add_advanced_chapter(92 ch92_network_sync)
+add_advanced_chapter(93 ch93_procedural_animation)
+add_advanced_chapter(94 ch94_minigame_demo)
 
 # ─── Engine chapters macro ────────────────────────────────────────────────────
 # 使用宏简化重复注册

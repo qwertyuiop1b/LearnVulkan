@@ -1,4 +1,4 @@
-# Vulkan 教程章节目录（70章完整路线图）
+# Vulkan 教程章节目录（94章完整路线图）
 
 ## 第一部分：Vulkan 基础管线（ch01–ch14）
 
@@ -99,6 +99,45 @@
 | ch68 | 场景 ECS | `World` / `ComponentStorage<T>` SoA / `FrustumCuller` |
 | ch69 | 材质系统 | `Material` 模板 / `MaterialInstance` 参数覆盖 / `MaterialLibrary` |
 | ch70 | MiniEngine | `Application` 基类 / 整合所有子系统 / 代码量减少 80% |
+
+## 第七部分：高级渲染与后处理（ch71–ch84）
+
+| 章节 | 主题 | 核心概念 |
+|------|------|---------|
+| ch71 | 景深 DoF | CoC / 散景模糊 / 焦点距离 |
+| ch72 | 运动模糊 | 速度缓冲 / 屏幕空间模糊 |
+| ch73 | 大气散射 | Rayleigh / Mie / 天空颜色 |
+| ch74 | SSGI | 屏幕空间全局光照 |
+| ch75 | LUT 调色 | 3D LUT / 色彩分级预设 |
+| ch76 | Clustered Forward | 光源聚类 / Forward+ |
+| ch77 | 虚拟纹理 | 页表 / 按需加载 |
+| ch78 | Async Compute | Timeline Semaphore / 双队列 |
+| ch79 | 地形 LOD | 四叉树 / 曲面细分 |
+| ch80 | 植被渲染 | Instancing / 风场动画 |
+| ch81 | Descriptor Buffer | 绑定模型 2.0 |
+| ch82 | DGC | 设备生成命令 |
+| ch83 | ReSTIR | 实时路径追踪 |
+| ch84 | 卡通渲染 | 色阶量化 / 轮廓线 / Sobel 边缘 |
+
+## 第八部分：游戏 Demo 与引擎进阶（ch85–ch90）
+
+| 章节 | 主题 | 核心概念 |
+|------|------|---------|
+| ch85 | 镜头光晕 | Bright Pass / Ghost / Halo / Streak |
+| ch86 | 次表面散射 | Wrap Lighting / Separable Blur SSS |
+| ch87 | 视差遮蔽贴图 | POM 射线步进 / 高度图自遮挡 |
+| ch88 | 动态天气 | 状态机 / 雨雪粒子 / 湿润度系统 |
+| ch89 | NavMesh 寻路 | A* / 网格编辑 / Recast 烘焙流程 |
+| ch90 | 场景流式加载 | Chunk 网格 / AsyncLoadQueue / LRU 卸载 |
+
+## 第九部分：完整游戏 Demo（ch91–ch94）
+
+| 章节 | 主题 | 核心概念 |
+|------|------|---------|
+| ch91 | 物理引擎集成 | Bullet/Jolt / 固定步长 / ECS 同步 |
+| ch92 | 网络同步 | 客户端预测 / 快照插值 / 回滚重放 |
+| ch93 | 程序化动画 | 状态机 / Blend Tree / Two-Bone IK |
+| ch94 | MiniGame Demo | 整合 ch51–93 全部子系统 |
 
 ---
 
