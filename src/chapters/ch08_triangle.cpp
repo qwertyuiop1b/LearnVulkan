@@ -36,9 +36,9 @@
  *  每帧渲染时，允许 CPU 提前准备下 N 帧的命令，
  *  而无需等待 GPU 完成当前帧。这提高了 CPU 利用率。
  *
- *  同步结构（每帧一份）：
+ *  同步结构：
  *    - imageAvailableSemaphore: 图像已获取，可以渲染
- *    - renderFinishedSemaphore: 渲染已完成，可以显示
+ *    - renderFinishedSemaphore: 渲染已完成，可以显示（每个交换链图像一份）
  *    - inFlightFence:           此帧的命令已执行完毕
  * ═══════════════════════════════════════════════════════════════════════════
  */
@@ -89,7 +89,9 @@ private:
     VkExtent2D                   swapchainExtent_{};
     QueueFamilyIndices           queueIndices_;
 
-    // ─── 同步对象（每个飞行帧一份） ──────────────────────────────────────────
+    // ─── 同步对象 ────────────────────────────────────────────────────────────
+    // imageAvailableSemaphores_ 和 inFlightFences_ 保护“飞行帧”资源。
+    // renderFinishedSemaphores_ 会交给 vkQueuePresentKHR 使用，必须按交换链图像分配。
     std::vector<VkSemaphore> imageAvailableSemaphores_;
     std::vector<VkSemaphore> renderFinishedSemaphores_;
     std::vector<VkFence>     inFlightFences_;
@@ -133,7 +135,6 @@ private:
     void createSyncObjects()
     {
         imageAvailableSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences_.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semCI{};
@@ -147,10 +148,32 @@ private:
 
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             VK_CHECK(vkCreateSemaphore(device_, &semCI, nullptr, &imageAvailableSemaphores_[i]));
-            VK_CHECK(vkCreateSemaphore(device_, &semCI, nullptr, &renderFinishedSemaphores_[i]));
             VK_CHECK(vkCreateFence(device_, &fenceCI, nullptr, &inFlightFences_[i]));
         }
-        std::cout << "✅ 同步对象已创建（" << MAX_FRAMES_IN_FLIGHT << " 套）\n";
+        createRenderFinishedSemaphores();
+        std::cout << "✅ 同步对象已创建（" << MAX_FRAMES_IN_FLIGHT
+                  << " 个飞行帧，" << renderFinishedSemaphores_.size()
+                  << " 个呈现信号量）\n";
+    }
+
+    void createRenderFinishedSemaphores()
+    {
+        renderFinishedSemaphores_.resize(swapchainImages_.size());
+
+        VkSemaphoreCreateInfo semCI{};
+        semCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        for (auto& semaphore : renderFinishedSemaphores_) {
+            VK_CHECK(vkCreateSemaphore(device_, &semCI, nullptr, &semaphore));
+        }
+    }
+
+    void cleanupRenderFinishedSemaphores()
+    {
+        for (auto semaphore : renderFinishedSemaphores_) {
+            vkDestroySemaphore(device_, semaphore, nullptr);
+        }
+        renderFinishedSemaphores_.clear();
     }
 
     // ─── 核心：渲染一帧 ───────────────────────────────────────────────────────
@@ -201,8 +224,10 @@ private:
         submitInfo.commandBufferCount   = 1;
         submitInfo.pCommandBuffers      = &commandBuffers_[currentFrame_];
 
-        // 命令执行完成后 signal 此信号量（通知呈现队列可以显示了）
-        VkSemaphore signalSemaphores[]  = { renderFinishedSemaphores_[currentFrame_] };
+        // 命令执行完成后 signal 此信号量（通知呈现队列可以显示了）。
+        // 这个信号量会被 presentation engine 消费，所以按交换链图像索引复用；
+        // 再次 acquire 到同一个 imageIndex 时，表示它上一次的 present 已经不再使用该信号量。
+        VkSemaphore signalSemaphores[]  = { renderFinishedSemaphores_[imageIndex] };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores    = signalSemaphores;
 
@@ -253,6 +278,7 @@ private:
         createSwapchain();
         createImageViews();
         createFramebuffers();
+        createRenderFinishedSemaphores();
         std::cout << "🔄 交换链已重建（" << width << "x" << height << "）\n";
     }
 
@@ -261,6 +287,7 @@ private:
         for (auto& fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
         for (auto& iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
+        cleanupRenderFinishedSemaphores();
     }
 
     void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex)
@@ -333,7 +360,9 @@ private:
         ci.pApplicationInfo = &ai;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
+#ifdef __APPLE__
         ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif 
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -505,7 +534,6 @@ private:
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
-            vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
         }
         vkDestroyDevice(device_, nullptr);

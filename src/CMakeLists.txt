@@ -1,3 +1,6 @@
+add_executable(ch00_start chapters/ch00_start.cpp)
+target_link_libraries(ch00_start PRIVATE vulkan_tutorial_common)
+
 # ─── Chapter 01: Instance + Validation Layers ────────────────────────────────
 add_executable(ch01_instance chapters/ch01_instance.cpp)
 target_link_libraries(ch01_instance PRIVATE vulkan_tutorial_common)
