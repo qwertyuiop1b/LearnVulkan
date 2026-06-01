@@ -15,6 +15,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Clang only: suppress designated-initializer order warnings.
+add_compile_options($<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-reorder-init-list>)
+
 # ─── Vulkan SDK ───────────────────────────────────────────────────────────────
 find_package(Vulkan REQUIRED)
 

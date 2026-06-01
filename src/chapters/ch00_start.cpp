@@ -1,4 +1,3 @@
-#include "vulkan_tutorial/utils.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
