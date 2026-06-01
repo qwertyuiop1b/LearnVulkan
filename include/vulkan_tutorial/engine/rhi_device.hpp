@@ -35,20 +35,20 @@ enum class DeviceFeature : uint32_t {
 
 /// 创建参数
 struct DeviceCreateInfo {
-    void*        windowHandle   = nullptr;   ///< GLFWwindow*，用于创建 Surface
-    bool         enableValidation = true;
-    bool         preferDiscreteGpu = true;   ///< 优先独显
+    void* windowHandle = nullptr; ///< GLFWwindow*，用于创建 Surface
+    bool enableValidation = true;
+    bool preferDiscreteGpu = true; ///< 优先独显
     std::vector<DeviceFeature> requiredFeatures;
     std::vector<DeviceFeature> optionalFeatures;
-    uint32_t     frameCount = 2;             ///< 并发帧数（影响 command pool 数量）
+    uint32_t frameCount = 2; ///< 并发帧数（影响 command pool 数量）
 };
 
 /// 队列族描述
 struct QueueInfo {
-    VkQueue  handle      = VK_NULL_HANDLE;
+    VkQueue handle = VK_NULL_HANDLE;
     uint32_t familyIndex = UINT32_MAX;
-    bool     supportsTimestamps = false;
-    float    timestampPeriodNs  = 0.0f;
+    bool supportsTimestamps = false;
+    float timestampPeriodNs = 0.0f;
 };
 
 /**
@@ -66,9 +66,11 @@ struct QueueInfo {
  * @endcode
  */
 class RHIDevice {
-public:
+  public:
     RHIDevice() = default;
-    ~RHIDevice() { destroy(); }
+    ~RHIDevice() {
+        destroy();
+    }
 
     RHIDevice(const RHIDevice&) = delete;
     RHIDevice& operator=(const RHIDevice&) = delete;
@@ -80,59 +82,85 @@ public:
     void destroy();
 
     // ─── 访问底层句柄 ─────────────────────────────────────────────────────
-    [[nodiscard]] VkInstance         instance()        const { return instance_; }
-    [[nodiscard]] VkPhysicalDevice   physicalDevice()  const { return physDev_; }
-    [[nodiscard]] VkDevice           device()          const { return device_; }
-    [[nodiscard]] VkSurfaceKHR       surface()         const { return surface_; }
-    [[nodiscard]] const QueueInfo&   graphicsQueue()   const { return graphics_; }
-    [[nodiscard]] const QueueInfo&   computeQueue()    const { return compute_; }
-    [[nodiscard]] const QueueInfo&   transferQueue()   const { return transfer_; }
+    [[nodiscard]] VkInstance instance() const {
+        return instance_;
+    }
+    [[nodiscard]] VkPhysicalDevice physicalDevice() const {
+        return physDev_;
+    }
+    [[nodiscard]] VkDevice device() const {
+        return device_;
+    }
+    [[nodiscard]] VkSurfaceKHR surface() const {
+        return surface_;
+    }
+    [[nodiscard]] const QueueInfo& graphicsQueue() const {
+        return graphics_;
+    }
+    [[nodiscard]] const QueueInfo& computeQueue() const {
+        return compute_;
+    }
+    [[nodiscard]] const QueueInfo& transferQueue() const {
+        return transfer_;
+    }
 
     // ─── 能力查询 ─────────────────────────────────────────────────────────
     [[nodiscard]] bool supportsFeature(DeviceFeature f) const;
-    [[nodiscard]] std::string deviceName() const { return deviceName_; }
-    [[nodiscard]] bool isDiscreteGpu()     const { return isDiscrete_; }
-    [[nodiscard]] VkDeviceSize totalVideoMemoryBytes() const { return videoMemBytes_; }
+    [[nodiscard]] std::string deviceName() const {
+        return deviceName_;
+    }
+    [[nodiscard]] bool isDiscreteGpu() const {
+        return isDiscrete_;
+    }
+    [[nodiscard]] VkDeviceSize totalVideoMemoryBytes() const {
+        return videoMemBytes_;
+    }
 
     // ─── 便利方法 ─────────────────────────────────────────────────────────
-    [[nodiscard]] uint32_t findMemoryType(uint32_t typeBits,
-                                          VkMemoryPropertyFlags props) const;
+    [[nodiscard]] uint32_t findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags props) const;
     [[nodiscard]] VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
                                                VkImageTiling tiling,
                                                VkFormatFeatureFlags features) const;
-    [[nodiscard]] VkFormat depthFormat() const { return depthFmt_; }
-    void waitIdle() const { vkDeviceWaitIdle(device_); }
+    [[nodiscard]] VkFormat depthFormat() const {
+        return depthFmt_;
+    }
+    void waitIdle() const {
+        vkDeviceWaitIdle(device_);
+    }
 
     // ─── 单次命令辅助 ─────────────────────────────────────────────────────
     [[nodiscard]] VkCommandBuffer beginOneShot();
-    void                          endOneShot(VkCommandBuffer cmd);
-    [[nodiscard]] VkCommandPool   commandPool() const { return cmdPool_; }
+    void endOneShot(VkCommandBuffer cmd);
+    [[nodiscard]] VkCommandPool commandPool() const {
+        return cmdPool_;
+    }
 
-    [[nodiscard]] bool isValid() const { return device_ != VK_NULL_HANDLE; }
+    [[nodiscard]] bool isValid() const {
+        return device_ != VK_NULL_HANDLE;
+    }
 
-private:
+  private:
     void pickPhysicalDevice(bool preferDiscrete);
-    void createLogicalDevice(const std::vector<DeviceFeature>& req,
-                             const std::vector<DeviceFeature>& opt);
+    void createLogicalDevice(const std::vector<DeviceFeature>& req, const std::vector<DeviceFeature>& opt);
     void detectCapabilities();
     void cacheDepthFormat();
 
-    VkInstance       instance_  = VK_NULL_HANDLE;
-    VkSurfaceKHR     surface_   = VK_NULL_HANDLE;
-    VkPhysicalDevice physDev_   = VK_NULL_HANDLE;
-    VkDevice         device_    = VK_NULL_HANDLE;
-    VkCommandPool    cmdPool_   = VK_NULL_HANDLE;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkPhysicalDevice physDev_ = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkCommandPool cmdPool_ = VK_NULL_HANDLE;
 
     QueueInfo graphics_{};
     QueueInfo compute_{};
     QueueInfo transfer_{};
 
-    VkFormat     depthFmt_    = VK_FORMAT_UNDEFINED;
-    std::string  deviceName_;
-    bool         isDiscrete_  = false;
+    VkFormat depthFmt_ = VK_FORMAT_UNDEFINED;
+    std::string deviceName_;
+    bool isDiscrete_ = false;
     VkDeviceSize videoMemBytes_ = 0;
 
-    uint32_t enabledFeatureMask_ = 0;  // bitfield of DeviceFeature
+    uint32_t enabledFeatureMask_ = 0; // bitfield of DeviceFeature
 
     VkDebugUtilsMessengerEXT debugMsg_ = VK_NULL_HANDLE;
 };

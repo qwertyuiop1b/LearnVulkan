@@ -37,9 +37,9 @@
 
 using namespace vulkan_tutorial;
 
-constexpr uint32_t WIDTH  = 800;
+constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
-constexpr int      MAX_FRAMES = 2;
+constexpr int MAX_FRAMES = 2;
 constexpr uint32_t CUBEMAP_SIZE = 256;
 
 struct SkyboxUBO {
@@ -48,25 +48,23 @@ struct SkyboxUBO {
 };
 
 struct CubemapTexture {
-    VkImage        image       = VK_NULL_HANDLE;
-    VkDeviceMemory memory      = VK_NULL_HANDLE;
-    VkImageView    view        = VK_NULL_HANDLE;
-    VkSampler      sampler     = VK_NULL_HANDLE;
-    VkFormat       format      = VK_FORMAT_R8G8B8A8_SRGB;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
 };
 
 struct SkyboxVertex {
     glm::vec3 pos;
-    static VkVertexInputBindingDescription getBindingDescription()
-    {
+    static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription d{};
         d.binding = 0;
         d.stride = sizeof(SkyboxVertex);
         d.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
         return d;
     }
-    static std::array<VkVertexInputAttributeDescription, 1> getAttributeDescriptions()
-    {
+    static std::array<VkVertexInputAttributeDescription, 1> getAttributeDescriptions() {
         std::array<VkVertexInputAttributeDescription, 1> a{};
         a[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(SkyboxVertex, pos)};
         return a;
@@ -74,31 +72,29 @@ struct SkyboxVertex {
 };
 
 static const std::vector<SkyboxVertex> SKYBOX_VERTICES = {
-    {{-1.0f, -1.0f, -1.0f}}, {{1.0f, -1.0f, -1.0f}}, {{1.0f, 1.0f, -1.0f}},
-    {{1.0f, 1.0f, -1.0f}},   {{-1.0f, 1.0f, -1.0f}}, {{-1.0f, -1.0f, -1.0f}},
-    {{-1.0f, -1.0f, 1.0f}},  {{1.0f, -1.0f, 1.0f}},  {{1.0f, 1.0f, 1.0f}},
-    {{1.0f, 1.0f, 1.0f}},    {{-1.0f, 1.0f, 1.0f}},  {{-1.0f, -1.0f, 1.0f}},
-    {{-1.0f, 1.0f, 1.0f}},   {{-1.0f, 1.0f, -1.0f}}, {{-1.0f, -1.0f, -1.0f}},
-    {{-1.0f, -1.0f, -1.0f}}, {{-1.0f, -1.0f, 1.0f}},  {{-1.0f, 1.0f, 1.0f}},
-    {{1.0f, 1.0f, 1.0f}},    {{1.0f, 1.0f, -1.0f}},  {{1.0f, -1.0f, -1.0f}},
-    {{1.0f, -1.0f, -1.0f}},  {{1.0f, -1.0f, 1.0f}},  {{1.0f, 1.0f, 1.0f}},
-    {{-1.0f, -1.0f, -1.0f}}, {{1.0f, -1.0f, -1.0f}}, {{1.0f, -1.0f, 1.0f}},
-    {{1.0f, -1.0f, 1.0f}},   {{-1.0f, -1.0f, 1.0f}},  {{-1.0f, -1.0f, -1.0f}},
-    {{-1.0f, 1.0f, -1.0f}},  {{1.0f, 1.0f, -1.0f}},  {{1.0f, 1.0f, 1.0f}},
-    {{1.0f, 1.0f, 1.0f}},    {{-1.0f, 1.0f, 1.0f}},  {{-1.0f, 1.0f, -1.0f}},
+    {{-1.0f, -1.0f, -1.0f}}, {{1.0f, -1.0f, -1.0f}},  {{1.0f, 1.0f, -1.0f}},   {{1.0f, 1.0f, -1.0f}},
+    {{-1.0f, 1.0f, -1.0f}},  {{-1.0f, -1.0f, -1.0f}}, {{-1.0f, -1.0f, 1.0f}},  {{1.0f, -1.0f, 1.0f}},
+    {{1.0f, 1.0f, 1.0f}},    {{1.0f, 1.0f, 1.0f}},    {{-1.0f, 1.0f, 1.0f}},   {{-1.0f, -1.0f, 1.0f}},
+    {{-1.0f, 1.0f, 1.0f}},   {{-1.0f, 1.0f, -1.0f}},  {{-1.0f, -1.0f, -1.0f}}, {{-1.0f, -1.0f, -1.0f}},
+    {{-1.0f, -1.0f, 1.0f}},  {{-1.0f, 1.0f, 1.0f}},   {{1.0f, 1.0f, 1.0f}},    {{1.0f, 1.0f, -1.0f}},
+    {{1.0f, -1.0f, -1.0f}},  {{1.0f, -1.0f, -1.0f}},  {{1.0f, -1.0f, 1.0f}},   {{1.0f, 1.0f, 1.0f}},
+    {{-1.0f, -1.0f, -1.0f}}, {{1.0f, -1.0f, -1.0f}},  {{1.0f, -1.0f, 1.0f}},   {{1.0f, -1.0f, 1.0f}},
+    {{-1.0f, -1.0f, 1.0f}},  {{-1.0f, -1.0f, -1.0f}}, {{-1.0f, 1.0f, -1.0f}},  {{1.0f, 1.0f, -1.0f}},
+    {{1.0f, 1.0f, 1.0f}},    {{1.0f, 1.0f, 1.0f}},    {{-1.0f, 1.0f, 1.0f}},   {{-1.0f, 1.0f, -1.0f}},
 };
 
-static ImageData generateCubemapFace(uint32_t faceIndex, uint32_t size)
-{
+static ImageData generateCubemapFace(uint32_t faceIndex, uint32_t size) {
     ImageData img;
     img.width = size;
     img.height = size;
     img.channels = 4;
     img.pixels.resize(static_cast<size_t>(size * size * 4));
-    const glm::vec3 faceColors[6] = {
-        {0.9f, 0.3f, 0.3f}, {0.3f, 0.9f, 0.3f}, {0.3f, 0.3f, 0.9f},
-        {0.9f, 0.9f, 0.3f}, {0.3f, 0.9f, 0.9f}, {0.9f, 0.3f, 0.9f}
-    };
+    const glm::vec3 faceColors[6] = {{0.9f, 0.3f, 0.3f},
+                                     {0.3f, 0.9f, 0.3f},
+                                     {0.3f, 0.3f, 0.9f},
+                                     {0.9f, 0.9f, 0.3f},
+                                     {0.3f, 0.9f, 0.9f},
+                                     {0.9f, 0.3f, 0.9f}};
     const glm::vec3 base = faceColors[faceIndex % 6];
     for (uint32_t y = 0; y < size; ++y) {
         const float v = static_cast<float>(y) / static_cast<float>(size);
@@ -114,10 +110,14 @@ static ImageData generateCubemapFace(uint32_t faceIndex, uint32_t size)
     return img;
 }
 
-static void copyBufferToImageLayer(VkDevice device, VkCommandPool pool, VkQueue queue,
-                                   VkBuffer buffer, VkImage image,
-                                   uint32_t width, uint32_t height, uint32_t layer)
-{
+static void copyBufferToImageLayer(VkDevice device,
+                                   VkCommandPool pool,
+                                   VkQueue queue,
+                                   VkBuffer buffer,
+                                   VkImage image,
+                                   uint32_t width,
+                                   uint32_t height,
+                                   uint32_t layer) {
     VkCommandBuffer cmd = beginSingleTimeCommands(device, pool);
     VkBufferImageCopy region{};
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -129,39 +129,60 @@ static void copyBufferToImageLayer(VkDevice device, VkCommandPool pool, VkQueue 
     endSingleTimeCommands(device, pool, queue, cmd);
 }
 
-static CubemapTexture createCubemapFromFaces(VkPhysicalDevice physicalDevice, VkDevice device,
-                                             VkCommandPool pool, VkQueue queue,
-                                             const std::array<ImageData, 6>& faces)
-{
+static CubemapTexture createCubemapFromFaces(VkPhysicalDevice physicalDevice,
+                                             VkDevice device,
+                                             VkCommandPool pool,
+                                             VkQueue queue,
+                                             const std::array<ImageData, 6>& faces) {
     CubemapTexture cubemap{};
     const uint32_t size = faces[0].width;
     cubemap.format = VK_FORMAT_R8G8B8A8_SRGB;
-    createImage(physicalDevice, device, size, size, cubemap.format,
+    createImage(physicalDevice,
+                device,
+                size,
+                size,
+                cubemap.format,
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                cubemap.image, cubemap.memory, 1, 6,
+                cubemap.image,
+                cubemap.memory,
+                1,
+                6,
                 VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT);
-    transitionImageLayout(device, pool, queue, cubemap.image, cubemap.format,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    transitionImageLayout(device,
+                          pool,
+                          queue,
+                          cubemap.image,
+                          cubemap.format,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     for (uint32_t face = 0; face < 6; ++face) {
-        const VkDeviceSize imageSize = static_cast<VkDeviceSize>(
-            faces[face].width * faces[face].height * faces[face].channels);
+        const VkDeviceSize imageSize =
+            static_cast<VkDeviceSize>(faces[face].width * faces[face].height * faces[face].channels);
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        createBuffer(physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        createBuffer(physicalDevice,
+                     device,
+                     imageSize,
+                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     stagingBuffer, stagingMemory);
+                     stagingBuffer,
+                     stagingMemory);
         void* mapped = nullptr;
         vkMapMemory(device, stagingMemory, 0, imageSize, 0, &mapped);
         std::memcpy(mapped, faces[face].pixels.data(), static_cast<size_t>(imageSize));
         vkUnmapMemory(device, stagingMemory);
-        copyBufferToImageLayer(device, pool, queue, stagingBuffer, cubemap.image,
-                               faces[face].width, faces[face].height, face);
+        copyBufferToImageLayer(
+            device, pool, queue, stagingBuffer, cubemap.image, faces[face].width, faces[face].height, face);
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingMemory, nullptr);
     }
-    transitionImageLayout(device, pool, queue, cubemap.image, cubemap.format,
+    transitionImageLayout(device,
+                          pool,
+                          queue,
+                          cubemap.image,
+                          cubemap.format,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     VkImageViewCreateInfo viewInfo{};
@@ -192,8 +213,7 @@ static CubemapTexture createCubemapFromFaces(VkPhysicalDevice physicalDevice, Vk
     return cubemap;
 }
 
-static void destroyCubemap(VkDevice device, CubemapTexture& cubemap)
-{
+static void destroyCubemap(VkDevice device, CubemapTexture& cubemap) {
     if (cubemap.sampler != VK_NULL_HANDLE)
         vkDestroySampler(device, cubemap.sampler, nullptr);
     if (cubemap.view != VK_NULL_HANDLE)
@@ -206,48 +226,52 @@ static void destroyCubemap(VkDevice device, CubemapTexture& cubemap)
 }
 
 class Ch41App {
-public:
-    void run() { initWindow(); initVulkan(); mainLoop(); cleanup(); }
+  public:
+    void run() {
+        initWindow();
+        initVulkan();
+        mainLoop();
+        cleanup();
+    }
 
-private:
-    GLFWwindow*           window_              = nullptr;
-    VkInstance            instance_            = VK_NULL_HANDLE;
-    VkSurfaceKHR          surface_             = VK_NULL_HANDLE;
-    VkPhysicalDevice      physicalDevice_      = VK_NULL_HANDLE;
-    VkDevice              device_              = VK_NULL_HANDLE;
-    VkQueue               graphicsQueue_       = VK_NULL_HANDLE;
-    VkQueue               presentQueue_        = VK_NULL_HANDLE;
-    VkSwapchainKHR        swapchain_           = VK_NULL_HANDLE;
-    VkRenderPass          renderPass_          = VK_NULL_HANDLE;
+  private:
+    GLFWwindow* window_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
-    VkPipelineLayout      pipelineLayout_      = VK_NULL_HANDLE;
-    VkPipeline            pipeline_            = VK_NULL_HANDLE;
-    VkCommandPool         commandPool_         = VK_NULL_HANDLE;
-    VkDescriptorPool      descriptorPool_      = VK_NULL_HANDLE;
-    DepthResources        depth_;
-    CubemapTexture        skyboxCubemap_;
-    std::vector<VkDescriptorSet>  descriptorSets_;
-    std::vector<VkBuffer>         uniformBuffers_;
-    std::vector<VkDeviceMemory>   uniformBuffersMemory_;
-    std::vector<void*>            uniformBuffersMapped_;
-    std::vector<VkImage>          swapchainImages_;
-    std::vector<VkImageView>      swapchainImageViews_;
-    std::vector<VkFramebuffer>    framebuffers_;
-    std::vector<VkCommandBuffer>  commandBuffers_;
-    VkFormat                      swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
-    VkExtent2D                    swapchainExtent_{};
-    QueueFamilyIndices            queueIndices_;
-    VkBuffer       vertexBuffer_       = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkCommandPool commandPool_ = VK_NULL_HANDLE;
+    VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+    DepthResources depth_;
+    CubemapTexture skyboxCubemap_;
+    std::vector<VkDescriptorSet> descriptorSets_;
+    std::vector<VkBuffer> uniformBuffers_;
+    std::vector<VkDeviceMemory> uniformBuffersMemory_;
+    std::vector<void*> uniformBuffersMapped_;
+    std::vector<VkImage> swapchainImages_;
+    std::vector<VkImageView> swapchainImageViews_;
+    std::vector<VkFramebuffer> framebuffers_;
+    std::vector<VkCommandBuffer> commandBuffers_;
+    VkFormat swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapchainExtent_{};
+    QueueFamilyIndices queueIndices_;
+    VkBuffer vertexBuffer_ = VK_NULL_HANDLE;
     VkDeviceMemory vertexBufferMemory_ = VK_NULL_HANDLE;
     std::vector<VkSemaphore> imageAvailableSems_;
     std::vector<VkSemaphore> renderFinishedSems_;
-    std::vector<VkFence>     inFlightFences_;
-    uint32_t                 currentFrame_ = 0;
-    bool                     resized_      = false;
-    InteractiveChapterTools  interactive_;
+    std::vector<VkFence> inFlightFences_;
+    uint32_t currentFrame_ = 0;
+    bool resized_ = false;
+    InteractiveChapterTools interactive_;
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch41 - 立方体贴图天空盒", nullptr, nullptr);
@@ -258,13 +282,11 @@ private:
         });
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         vulkan_tutorial::createInstance(instance_);
         VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
         pickPhysicalDevice(instance_, surface_, physicalDevice_);
-        createLogicalDevice(physicalDevice_, surface_, device_, graphicsQueue_,
-                            presentQueue_, queueIndices_);
+        createLogicalDevice(physicalDevice_, surface_, device_, graphicsQueue_, presentQueue_, queueIndices_);
         createSwapchain();
         createImageViews();
         depth_.format = findDepthFormat(physicalDevice_);
@@ -298,39 +320,42 @@ private:
         std::cout << "\n✅ 天空盒初始化完成！\n";
     }
 
-    void createSkyboxCubemap()
-    {
+    void createSkyboxCubemap() {
         std::array<ImageData, 6> faces{};
         for (uint32_t i = 0; i < 6; ++i)
             faces[i] = generateCubemapFace(i, CUBEMAP_SIZE);
-        skyboxCubemap_ = createCubemapFromFaces(physicalDevice_, device_, commandPool_,
-                                                graphicsQueue_, faces);
+        skyboxCubemap_ = createCubemapFromFaces(physicalDevice_, device_, commandPool_, graphicsQueue_, faces);
         std::cout << "✅ 程序化立方体贴图已创建（6 面 × " << CUBEMAP_SIZE << "²）\n";
     }
 
-    void createSkyboxMesh()
-    {
+    void createSkyboxMesh() {
         const VkDeviceSize size = sizeof(SKYBOX_VERTICES[0]) * SKYBOX_VERTICES.size();
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-        createBuffer(physicalDevice_, device_, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        createBuffer(physicalDevice_,
+                     device_,
+                     size,
+                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     stagingBuffer, stagingMemory);
+                     stagingBuffer,
+                     stagingMemory);
         void* data = nullptr;
         vkMapMemory(device_, stagingMemory, 0, size, 0, &data);
         std::memcpy(data, SKYBOX_VERTICES.data(), static_cast<size_t>(size));
         vkUnmapMemory(device_, stagingMemory);
-        createBuffer(physicalDevice_, device_, size,
+        createBuffer(physicalDevice_,
+                     device_,
+                     size,
                      VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                     vertexBuffer_, vertexBufferMemory_);
+                     vertexBuffer_,
+                     vertexBufferMemory_);
         copyBuffer(device_, commandPool_, graphicsQueue_, stagingBuffer, vertexBuffer_, size);
         vkDestroyBuffer(device_, stagingBuffer, nullptr);
         vkFreeMemory(device_, stagingMemory, nullptr);
     }
 
-    void createRenderPass()
-    {
+    void createRenderPass() {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapchainImageFormat_;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -359,13 +384,10 @@ private:
         VkSubpassDependency dep{};
         dep.srcSubpass = VK_SUBPASS_EXTERNAL;
         dep.dstSubpass = 0;
-        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dep.srcAccessMask = 0;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
         VkRenderPassCreateInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -378,8 +400,7 @@ private:
         VK_CHECK(vkCreateRenderPass(device_, &rpi, nullptr, &renderPass_));
     }
 
-    void createDescriptorSetLayout()
-    {
+    void createDescriptorSetLayout() {
         std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
         bindings[0].binding = 0;
         bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -396,15 +417,24 @@ private:
         VK_CHECK(vkCreateDescriptorSetLayout(device_, &ci, nullptr, &descriptorSetLayout_));
     }
 
-    void createGraphicsPipeline()
-    {
+    void createGraphicsPipeline() {
         VkShaderModule vert = createShaderModuleFromFile(device_, "skybox.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "skybox.frag.spv");
         VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
-        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_VERTEX_BIT,
+                     vert,
+                     "main",
+                     nullptr};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_FRAGMENT_BIT,
+                     frag,
+                     "main",
+                     nullptr};
         auto bd = SkyboxVertex::getBindingDescription();
         auto ad = SkyboxVertex::getAttributeDescriptions();
         VkPipelineVertexInputStateCreateInfo vi{};
@@ -413,9 +443,11 @@ private:
         vi.pVertexBindingDescriptions = &bd;
         vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(ad.size());
         vi.pVertexAttributeDescriptions = ad.data();
-        VkPipelineInputAssemblyStateCreateInfo ia{
-            VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, nullptr, 0,
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE};
+        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                  nullptr,
+                                                  0,
+                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                                  VK_FALSE};
         VkPipelineViewportStateCreateInfo vs{
             VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr};
         VkPipelineRasterizationStateCreateInfo rs{};
@@ -469,8 +501,7 @@ private:
         vkDestroyShaderModule(device_, vert, nullptr);
     }
 
-    void createFramebuffers()
-    {
+    void createFramebuffers() {
         framebuffers_.resize(swapchainImageViews_.size());
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
             std::array<VkImageView, 2> attachments = {swapchainImageViews_[i], depth_.view};
@@ -486,22 +517,24 @@ private:
         }
     }
 
-    void createUniformBuffers()
-    {
+    void createUniformBuffers() {
         const VkDeviceSize size = sizeof(SkyboxUBO);
         uniformBuffers_.resize(MAX_FRAMES);
         uniformBuffersMemory_.resize(MAX_FRAMES);
         uniformBuffersMapped_.resize(MAX_FRAMES);
         for (int i = 0; i < MAX_FRAMES; ++i) {
-            createBuffer(physicalDevice_, device_, size, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            createBuffer(physicalDevice_,
+                         device_,
+                         size,
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         uniformBuffers_[i], uniformBuffersMemory_[i]);
+                         uniformBuffers_[i],
+                         uniformBuffersMemory_[i]);
             vkMapMemory(device_, uniformBuffersMemory_[i], 0, size, 0, &uniformBuffersMapped_[i]);
         }
     }
 
-    void createDescriptorPool()
-    {
+    void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> sizes{};
         sizes[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(MAX_FRAMES)};
         sizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<uint32_t>(MAX_FRAMES)};
@@ -513,8 +546,7 @@ private:
         VK_CHECK(vkCreateDescriptorPool(device_, &ci, nullptr, &descriptorPool_));
     }
 
-    void createDescriptorSets()
-    {
+    void createDescriptorSets() {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES, descriptorSetLayout_);
         VkDescriptorSetAllocateInfo ai{};
         ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -545,13 +577,11 @@ private:
             writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             writes[1].descriptorCount = 1;
             writes[1].pImageInfo = &imgInfo;
-            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()),
-                                   writes.data(), 0, nullptr);
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
         }
     }
 
-    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t idx)
-    {
+    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t idx) {
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
@@ -575,8 +605,8 @@ private:
         VkBuffer vb[] = {vertexBuffer_};
         VkDeviceSize off[] = {0};
         vkCmdBindVertexBuffers(cmd, 0, 1, vb, off);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
-                                0, 1, &descriptorSets_[currentFrame_], 0, nullptr);
+        vkCmdBindDescriptorSets(
+            cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &descriptorSets_[currentFrame_], 0, nullptr);
         vkCmdDraw(cmd, static_cast<uint32_t>(SKYBOX_VERTICES.size()), 1, 0, 0);
         interactive_.renderUi(cmd);
         vkCmdEndRenderPass(cmd);
@@ -584,23 +614,23 @@ private:
         VK_CHECK(vkEndCommandBuffer(cmd));
     }
 
-    void updateUniformBuffer(uint32_t frame)
-    {
+    void updateUniformBuffer(uint32_t frame) {
         SkyboxUBO ubo{};
-        const float aspect = static_cast<float>(swapchainExtent_.width) /
-                             static_cast<float>(swapchainExtent_.height);
+        const float aspect = static_cast<float>(swapchainExtent_.width) / static_cast<float>(swapchainExtent_.height);
         ubo.projection = interactive_.camera().projectionMatrix(aspect, 45.0f, 0.1f, 10.0f);
         ubo.view = interactive_.camera().viewMatrixWithoutTranslation();
         std::memcpy(uniformBuffersMapped_[frame], &ubo, sizeof(ubo));
     }
 
-    void drawFrame()
-    {
+    void drawFrame() {
         vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
         uint32_t imgIdx = 0;
-        VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-            imageAvailableSems_[currentFrame_], VK_NULL_HANDLE, &imgIdx);
-        if (r == VK_ERROR_OUT_OF_DATE_KHR) { recreateSwapchain(); return; }
+        VkResult r = vkAcquireNextImageKHR(
+            device_, swapchain_, UINT64_MAX, imageAvailableSems_[currentFrame_], VK_NULL_HANDLE, &imgIdx);
+        if (r == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain();
+            return;
+        }
         updateUniformBuffer(currentFrame_);
         vkResetFences(device_, 1, &inFlightFences_[currentFrame_]);
         vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
@@ -635,8 +665,7 @@ private:
         currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES;
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         std::cout << "🎨 旋转相机观察程序化天空盒（深度=1.0）...\n";
         auto lastTime = std::chrono::steady_clock::now();
         while (!glfwWindowShouldClose(window_)) {
@@ -652,26 +681,29 @@ private:
         vkDeviceWaitIdle(device_);
     }
 
-    void recreateSwapchain()
-    {
+    void recreateSwapchain() {
         int w = 0, h = 0;
         glfwGetFramebufferSize(window_, &w, &h);
-        while (!w || !h) { glfwGetFramebufferSize(window_, &w, &h); glfwWaitEvents(); }
+        while (!w || !h) {
+            glfwGetFramebufferSize(window_, &w, &h);
+            glfwWaitEvents();
+        }
         vkDeviceWaitIdle(device_);
-        for (auto& fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto& fb : framebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
         destroyDepthResources(device_, depth_);
-        for (auto& iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
+        for (auto& iv : swapchainImageViews_)
+            vkDestroyImageView(device_, iv, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         createSwapchain();
         createImageViews();
         depth_ = createDepthResources(physicalDevice_, device_, swapchainExtent_);
         createFramebuffers();
-        interactive_.onSwapchainRecreated(renderPass_, swapchainImageFormat_,
-            static_cast<uint32_t>(swapchainImages_.size()));
+        interactive_.onSwapchainRecreated(
+            renderPass_, swapchainImageFormat_, static_cast<uint32_t>(swapchainImages_.size()));
     }
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         auto sc = querySwapChainSupport(physicalDevice_, surface_);
         auto fmt = chooseSwapSurfaceFormat(sc.formats);
         auto mode = chooseSwapPresentMode(sc.presentModes);
@@ -700,8 +732,7 @@ private:
         swapchainImageFormat_ = fmt.format;
     }
 
-    void createImageViews()
-    {
+    void createImageViews() {
         swapchainImageViews_.resize(swapchainImages_.size());
         for (size_t i = 0; i < swapchainImages_.size(); ++i) {
             VkImageViewCreateInfo ci{};
@@ -714,8 +745,7 @@ private:
         }
     }
 
-    void createCommandPool()
-    {
+    void createCommandPool() {
         VkCommandPoolCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -723,8 +753,7 @@ private:
         VK_CHECK(vkCreateCommandPool(device_, &ci, nullptr, &commandPool_));
     }
 
-    void createCommandBuffers()
-    {
+    void createCommandBuffers() {
         commandBuffers_.resize(MAX_FRAMES);
         VkCommandBufferAllocateInfo ai{};
         ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -734,8 +763,7 @@ private:
         VK_CHECK(vkAllocateCommandBuffers(device_, &ai, commandBuffers_.data()));
     }
 
-    void createSyncObjects()
-    {
+    void createSyncObjects() {
         imageAvailableSems_.resize(MAX_FRAMES);
         renderFinishedSems_.resize(MAX_FRAMES);
         inFlightFences_.resize(MAX_FRAMES);
@@ -751,8 +779,7 @@ private:
         }
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         destroyCubemap(device_, skyboxCubemap_);
         for (int i = 0; i < MAX_FRAMES; ++i) {
             vkDestroyBuffer(device_, uniformBuffers_[i], nullptr);
@@ -768,12 +795,14 @@ private:
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
         }
         vkDestroyCommandPool(device_, commandPool_, nullptr);
-        for (auto& fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto& fb : framebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
         destroyDepthResources(device_, depth_);
         vkDestroyPipeline(device_, pipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
-        for (auto& iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
+        for (auto& iv : swapchainImageViews_)
+            vkDestroyImageView(device_, iv, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         interactive_.shutdown(device_);
         vkDestroyDevice(device_, nullptr);
@@ -785,13 +814,14 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════════════════\n";
     std::cout << " 第41章：立方体贴图天空盒\n";
     std::cout << "═══════════════════════════════════════════════════\n\n";
     Ch41App app;
-    try { app.run(); } catch (const std::exception& e) {
+    try {
+        app.run();
+    } catch (const std::exception& e) {
         std::cerr << "❌ 错误：" << e.what() << "\n";
         return 1;
     }

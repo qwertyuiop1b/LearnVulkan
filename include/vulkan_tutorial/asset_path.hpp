@@ -10,8 +10,7 @@
 
 namespace vulkan_tutorial {
 
-inline std::string resolveAssetPath(const std::string& relativePath)
-{
+inline std::string resolveAssetPath(const std::string& relativePath) {
 #ifdef ASSET_DIR
     const std::filesystem::path assetRoot = ASSET_DIR;
 #else

@@ -42,24 +42,25 @@ namespace vulkan_tutorial {
 /// 瞬态纹理句柄（渲染图内部资源的引用）
 struct RgTextureHandle {
     uint32_t id = UINT32_MAX;
-    [[nodiscard]] bool isValid() const { return id != UINT32_MAX; }
+    [[nodiscard]] bool isValid() const {
+        return id != UINT32_MAX;
+    }
 };
 
 /// 瞬态纹理描述符
 struct RgTextureDesc {
-    std::string        name;
-    VkFormat           format  = VK_FORMAT_R8G8B8A8_UNORM;
-    VkExtent2D         extent  = {0, 0};          ///< 0×0 = 跟随交换链大小
-    VkImageUsageFlags  usage   = VK_IMAGE_USAGE_SAMPLED_BIT
-                               | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    VkImageAspectFlags aspect  = VK_IMAGE_ASPECT_COLOR_BIT;
+    std::string name;
+    VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
+    VkExtent2D extent = {0, 0}; ///< 0×0 = 跟随交换链大小
+    VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
 };
 
 /// Graphics Pass 执行回调
 using GraphicsPassFn = std::function<void(VkCommandBuffer cmd, uint32_t frameIndex)>;
 
 /// Compute Pass 执行回调
-using ComputePassFn  = std::function<void(VkCommandBuffer cmd, uint32_t frameIndex)>;
+using ComputePassFn = std::function<void(VkCommandBuffer cmd, uint32_t frameIndex)>;
 
 /**
  * @brief 简化版渲染图
@@ -68,7 +69,7 @@ using ComputePassFn  = std::function<void(VkCommandBuffer cmd, uint32_t frameInd
  * 不负责：Framebuffer / RenderPass 创建（由 Pass 回调自行管理）。
  */
 class RenderGraph {
-public:
+  public:
     /// 声明一个瞬态纹理，返回其句柄
     RgTextureHandle declareTexture(const RgTextureDesc& desc);
 
@@ -80,11 +81,11 @@ public:
      * @param depthWrite  本 Pass 写入的深度 Attachment（可无效）
      * @param fn          实际录制 Vulkan 命令的回调（需自行调 vkCmdBeginRenderPass）
      */
-    void addGraphicsPass(const char*                         name,
-                         std::vector<RgTextureHandle>        reads,
-                         std::vector<RgTextureHandle>        colorWrites,
-                         RgTextureHandle                     depthWrite,
-                         GraphicsPassFn                      fn);
+    void addGraphicsPass(const char* name,
+                         std::vector<RgTextureHandle> reads,
+                         std::vector<RgTextureHandle> colorWrites,
+                         RgTextureHandle depthWrite,
+                         GraphicsPassFn fn);
 
     /**
      * @brief 添加一个计算 Pass
@@ -93,27 +94,21 @@ public:
      * @param writes 以 GENERAL 布局写入的纹理
      * @param fn     实际录制 vkCmdDispatch 的回调
      */
-    void addComputePass(const char*                         name,
-                        std::vector<RgTextureHandle>        reads,
-                        std::vector<RgTextureHandle>        writes,
-                        ComputePassFn                       fn);
+    void addComputePass(const char* name,
+                        std::vector<RgTextureHandle> reads,
+                        std::vector<RgTextureHandle> writes,
+                        ComputePassFn fn);
 
     /**
      * @brief 分配所有瞬态纹理
      * @param extent 若 RgTextureDesc.extent 为 {0,0}，则使用此值
      */
-    void build(VkDevice         device,
-               VkPhysicalDevice physicalDevice,
-               VkCommandPool    cmdPool,
-               VkQueue          queue,
-               VkExtent2D       extent);
+    void
+    build(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool cmdPool, VkQueue queue, VkExtent2D extent);
 
     /// 交换链大小变化时重新分配瞬态纹理
-    void resize(VkDevice         device,
-                VkPhysicalDevice physicalDevice,
-                VkCommandPool    cmdPool,
-                VkQueue          queue,
-                VkExtent2D       newExtent);
+    void resize(
+        VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool cmdPool, VkQueue queue, VkExtent2D newExtent);
 
     /// 录制当前帧的所有 Pass（自动插入 Layout 屏障）
     void execute(VkCommandBuffer cmd, uint32_t frameIndex);
@@ -124,43 +119,44 @@ public:
     /// 清空所有 Pass 定义（纹理声明保留）
     void resetPasses();
 
-    [[nodiscard]] VkImageView   getView (RgTextureHandle h) const;
-    [[nodiscard]] VkImage       getImage(RgTextureHandle h) const;
+    [[nodiscard]] VkImageView getView(RgTextureHandle h) const;
+    [[nodiscard]] VkImage getImage(RgTextureHandle h) const;
     [[nodiscard]] VkImageLayout getLayout(RgTextureHandle h) const;
 
     /// 通知 RenderGraph 某个资源当前所在的 Layout（用于手动 Barrier 之后同步追踪状态）
     void setLayout(RgTextureHandle h, VkImageLayout layout);
 
-    [[nodiscard]] bool isBuilt() const { return built_; }
+    [[nodiscard]] bool isBuilt() const {
+        return built_;
+    }
 
-private:
+  private:
     struct RgTexture {
-        RgTextureDesc  desc;
-        VkImage        image         = VK_NULL_HANDLE;
-        VkDeviceMemory memory        = VK_NULL_HANDLE;
-        VkImageView    view          = VK_NULL_HANDLE;
-        VkImageLayout  currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        RgTextureDesc desc;
+        VkImage image = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkImageView view = VK_NULL_HANDLE;
+        VkImageLayout currentLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     };
 
     enum class PassType { Graphics, Compute };
 
     struct PassNode {
-        PassType                     type;
-        std::string                  name;
+        PassType type;
+        std::string name;
         std::vector<RgTextureHandle> reads;
         std::vector<RgTextureHandle> colorWrites;
-        RgTextureHandle              depthWrite;
-        GraphicsPassFn               graphicsFn;
-        ComputePassFn                computeFn;
+        RgTextureHandle depthWrite;
+        GraphicsPassFn graphicsFn;
+        ComputePassFn computeFn;
     };
 
     std::vector<RgTexture> textures_;
-    std::vector<PassNode>  passes_;
-    VkExtent2D             buildExtent_{};
-    bool                   built_ = false;
+    std::vector<PassNode> passes_;
+    VkExtent2D buildExtent_{};
+    bool built_ = false;
 
-    void allocateTextures(VkDevice device, VkPhysicalDevice physicalDevice,
-                          VkCommandPool cmdPool, VkQueue queue);
+    void allocateTextures(VkDevice device, VkPhysicalDevice physicalDevice, VkCommandPool cmdPool, VkQueue queue);
     void freeTextures(VkDevice device);
     void transitionImage(VkCommandBuffer cmd, RgTexture& tex, VkImageLayout target);
 };

@@ -24,14 +24,14 @@ struct GltfVertex {
     glm::vec3 normal{0.0f, 1.0f, 0.0f};
     glm::vec4 tangent{1.0f, 0.0f, 0.0f, 1.0f};
     glm::vec2 texCoord{0.0f};
-    glm::uvec4  joints{0};
-    glm::vec4   weights{0.0f};
+    glm::uvec4 joints{0};
+    glm::vec4 weights{0.0f};
 };
 
 struct GltfMaterial {
     glm::vec4 baseColorFactor{1.0f};
-    float     metallicFactor  = 1.0f;
-    float     roughnessFactor = 1.0f;
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
     std::string baseColorTexture;
     std::string normalTexture;
     std::string metallicRoughnessTexture;
@@ -39,14 +39,14 @@ struct GltfMaterial {
 
 struct GltfMeshPrimitive {
     std::vector<GltfVertex> vertices;
-    std::vector<uint32_t>   indices;
-    int32_t                 materialIndex = -1;
+    std::vector<uint32_t> indices;
+    int32_t materialIndex = -1;
 };
 
 struct GltfAnimationChannel {
     uint32_t targetNode = 0;
     uint32_t samplerIndex = 0;
-    int      pathType = 0;
+    int pathType = 0;
 };
 
 struct GltfAnimationSampler {
@@ -65,15 +65,15 @@ struct GltfAnimation {
 
 struct GltfSkin {
     std::vector<glm::mat4> inverseBindMatrices;
-    std::vector<uint32_t>  jointNodes;
+    std::vector<uint32_t> jointNodes;
 };
 
 struct GltfScene {
     std::vector<GltfMeshPrimitive> meshes;
-    std::vector<GltfMaterial>      materials;
-    std::vector<GltfAnimation>     animations;
-    std::vector<GltfSkin>          skins;
-    std::string                    baseDirectory;
+    std::vector<GltfMaterial> materials;
+    std::vector<GltfAnimation> animations;
+    std::vector<GltfSkin> skins;
+    std::string baseDirectory;
 };
 
 GltfScene loadGltfScene(const std::string& relativePath);

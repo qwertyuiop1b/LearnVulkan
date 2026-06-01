@@ -21,17 +21,19 @@ namespace engine {
 // ─── CommandPool ──────────────────────────────────────────────────────────
 
 class CommandPool {
-public:
+  public:
     void create(RHIDevice& dev, uint32_t frameCount = 2);
     void destroy();
-    void reset(uint32_t frameIndex);   ///< 帧开始时重置当帧的 pool
+    void reset(uint32_t frameIndex); ///< 帧开始时重置当帧的 pool
 
     [[nodiscard]] VkCommandBuffer allocate(uint32_t frameIndex,
                                            VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-    [[nodiscard]] VkCommandPool pool(uint32_t frameIndex) const { return pools_[frameIndex]; }
+    [[nodiscard]] VkCommandPool pool(uint32_t frameIndex) const {
+        return pools_[frameIndex];
+    }
 
-private:
-    RHIDevice*              dev_ = nullptr;
+  private:
+    RHIDevice* dev_ = nullptr;
     std::vector<VkCommandPool> pools_;
 };
 
@@ -52,7 +54,7 @@ private:
  * @endcode
  */
 class CommandRecorder {
-public:
+  public:
     enum Hint { Normal, OneShot, ReRecordable };
 
     CommandRecorder() = default;
@@ -65,17 +67,19 @@ public:
     /// 显式结束（析构时会检查是否已 end）
     void end();
 
-    [[nodiscard]] VkCommandBuffer handle() const { return cmd_; }
+    [[nodiscard]] VkCommandBuffer handle() const {
+        return cmd_;
+    }
 
     /// 便利：直接在 recorder 上调用 draw、bind 等命令
     void bindPipeline(VkPipeline pipeline, VkPipelineBindPoint bp = VK_PIPELINE_BIND_POINT_GRAPHICS);
     void setViewportScissor(float x, float y, float w, float h);
-    void pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages,
-                       uint32_t offset, uint32_t size, const void* data);
+    void
+    pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages, uint32_t offset, uint32_t size, const void* data);
 
-private:
-    VkCommandBuffer cmd_    = VK_NULL_HANDLE;
-    bool            ended_  = false;
+  private:
+    VkCommandBuffer cmd_ = VK_NULL_HANDLE;
+    bool ended_ = false;
 };
 
 // ─── RenderPassScope ──────────────────────────────────────────────────────
@@ -92,7 +96,7 @@ private:
  * @endcode
  */
 class RenderPassScope {
-public:
+  public:
     RenderPassScope() = default;
     RenderPassScope(VkCommandBuffer cmd,
                     VkRenderPass renderPass,
@@ -109,9 +113,9 @@ public:
 
     void end();
 
-private:
-    VkCommandBuffer cmd_   = VK_NULL_HANDLE;
-    bool            ended_ = false;
+  private:
+    VkCommandBuffer cmd_ = VK_NULL_HANDLE;
+    bool ended_ = false;
 };
 
 // ─── BarrierBatch ─────────────────────────────────────────────────────────
@@ -135,30 +139,33 @@ private:
  * @endcode
  */
 class BarrierBatch {
-public:
+  public:
     explicit BarrierBatch(VkCommandBuffer cmd) : cmd_(cmd) {}
-    ~BarrierBatch() { if (!flushed_) flush(); }
+    ~BarrierBatch() {
+        if (!flushed_)
+            flush();
+    }
 
     BarrierBatch& imageLayout(VkImage image,
                               VkImageLayout oldLayout,
                               VkImageLayout newLayout,
                               VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT,
-                              uint32_t mipLevels  = 1,
+                              uint32_t mipLevels = 1,
                               uint32_t layerCount = 1);
 
     BarrierBatch& buffer(VkBuffer buf,
                          VkAccessFlags srcAccess,
                          VkAccessFlags dstAccess,
-                         VkDeviceSize  offset = 0,
-                         VkDeviceSize  size   = VK_WHOLE_SIZE);
+                         VkDeviceSize offset = 0,
+                         VkDeviceSize size = VK_WHOLE_SIZE);
 
     /// 提交所有收集的 barrier（自动推导 stage flags）
     void flush();
 
-private:
-    VkCommandBuffer cmd_    = VK_NULL_HANDLE;
-    bool            flushed_= false;
-    std::vector<VkImageMemoryBarrier>  imageBarriers_;
+  private:
+    VkCommandBuffer cmd_ = VK_NULL_HANDLE;
+    bool flushed_ = false;
+    std::vector<VkImageMemoryBarrier> imageBarriers_;
     std::vector<VkBufferMemoryBarrier> bufferBarriers_;
     VkPipelineStageFlags srcStage_ = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkPipelineStageFlags dstStage_ = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -181,49 +188,57 @@ private:
 struct DrawKey {
     enum Layer : uint8_t { Opaque = 0, AlphaTest = 1, Transparent = 2, UI = 3 };
 
-    static DrawKey make(Layer layer, uint16_t pipelineId,
-                        uint16_t materialId, uint32_t meshId)
-    {
+    static DrawKey make(Layer layer, uint16_t pipelineId, uint16_t materialId, uint32_t meshId) {
         DrawKey k{};
-        k.value = (uint64_t(layer)     << 56)
-                | (uint64_t(pipelineId) << 40)
-                | (uint64_t(materialId) << 24)
-                | uint64_t(meshId & 0x00FFFFFFu);
+        k.value = (uint64_t(layer) << 56) | (uint64_t(pipelineId) << 40) | (uint64_t(materialId) << 24) |
+                  uint64_t(meshId & 0x00FFFFFFu);
         return k;
     }
-    bool operator<(const DrawKey& o) const { return value < o.value; }
+    bool operator<(const DrawKey& o) const {
+        return value < o.value;
+    }
     uint64_t value = 0;
 };
 
 struct DrawCall {
-    DrawKey             key;
-    VkPipeline          pipeline  = VK_NULL_HANDLE;
-    VkPipelineLayout    layout    = VK_NULL_HANDLE;
-    VkDescriptorSet     descSet   = VK_NULL_HANDLE;
-    VkBuffer            vertexBuf = VK_NULL_HANDLE;
-    VkBuffer            indexBuf  = VK_NULL_HANDLE;
-    uint32_t            indexCount  = 0;
-    uint32_t            vertexCount = 0;
-    uint32_t            instanceCount = 1;
+    DrawKey key;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet descSet = VK_NULL_HANDLE;
+    VkBuffer vertexBuf = VK_NULL_HANDLE;
+    VkBuffer indexBuf = VK_NULL_HANDLE;
+    uint32_t indexCount = 0;
+    uint32_t vertexCount = 0;
+    uint32_t instanceCount = 1;
     std::vector<uint8_t> pushConstantData;
 
-    bool operator<(const DrawCall& o) const { return key < o.key; }
+    bool operator<(const DrawCall& o) const {
+        return key < o.key;
+    }
 };
 
 /// 收集并排序后提交 draw calls
 class DrawCallBatch {
-public:
-    void add(DrawCall dc) { drawCalls_.push_back(std::move(dc)); }
-    void sort()  { std::sort(drawCalls_.begin(), drawCalls_.end()); }
+  public:
+    void add(DrawCall dc) {
+        drawCalls_.push_back(std::move(dc));
+    }
+    void sort() {
+        std::sort(drawCalls_.begin(), drawCalls_.end());
+    }
     void flush(VkCommandBuffer cmd);
-    void clear() { drawCalls_.clear(); }
+    void clear() {
+        drawCalls_.clear();
+    }
 
-    [[nodiscard]] size_t count() const { return drawCalls_.size(); }
+    [[nodiscard]] size_t count() const {
+        return drawCalls_.size();
+    }
 
-private:
+  private:
     std::vector<DrawCall> drawCalls_;
-    VkPipeline            lastPipeline_ = VK_NULL_HANDLE;
-    VkDescriptorSet       lastDescSet_  = VK_NULL_HANDLE;
+    VkPipeline lastPipeline_ = VK_NULL_HANDLE;
+    VkDescriptorSet lastDescSet_ = VK_NULL_HANDLE;
 };
 
 } // namespace engine

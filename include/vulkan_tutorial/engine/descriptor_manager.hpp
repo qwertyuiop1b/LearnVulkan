@@ -46,17 +46,20 @@ namespace engine {
 // ─── Layout 缓存 ──────────────────────────────────────────────────────────
 
 class DescriptorLayoutCache {
-public:
-    void init(RHIDevice& dev) { dev_ = &dev; }
+  public:
+    void init(RHIDevice& dev) {
+        dev_ = &dev;
+    }
     void destroy();
 
     /// 获取或创建 DescriptorSetLayout（自动去重）
-    [[nodiscard]] VkDescriptorSetLayout
-    getOrCreate(const std::vector<VkDescriptorSetLayoutBinding>& bindings);
+    [[nodiscard]] VkDescriptorSetLayout getOrCreate(const std::vector<VkDescriptorSetLayoutBinding>& bindings);
 
-    [[nodiscard]] size_t cachedCount() const { return cache_.size(); }
+    [[nodiscard]] size_t cachedCount() const {
+        return cache_.size();
+    }
 
-private:
+  private:
     struct LayoutKey {
         std::vector<VkDescriptorSetLayoutBinding> bindings;
         bool operator==(const LayoutKey& o) const;
@@ -65,7 +68,7 @@ private:
         size_t operator()(const LayoutKey& k) const;
     };
 
-    RHIDevice*  dev_ = nullptr;
+    RHIDevice* dev_ = nullptr;
     std::unordered_map<LayoutKey, VkDescriptorSetLayout, LayoutKeyHash> cache_;
 };
 
@@ -84,28 +87,36 @@ private:
  *   - 或者 freeSet() 按需释放单个 set
  */
 class DescriptorAllocator {
-public:
+  public:
     void init(RHIDevice& dev);
     void destroy();
-    void reset();   ///< 归还所有描述符集（但不销毁 pool）
+    void reset(); ///< 归还所有描述符集（但不销毁 pool）
 
     [[nodiscard]] VkDescriptorSet allocate(VkDescriptorSetLayout layout);
 
-    [[nodiscard]] size_t poolCount()      const { return allPools_.size(); }
-    [[nodiscard]] size_t totalAllocated() const { return totalAllocated_; }
-    [[nodiscard]] RHIDevice* dev()        const { return dev_; }
-    [[nodiscard]] VkDevice device()       const { return dev_ ? dev_->device() : VK_NULL_HANDLE; }
+    [[nodiscard]] size_t poolCount() const {
+        return allPools_.size();
+    }
+    [[nodiscard]] size_t totalAllocated() const {
+        return totalAllocated_;
+    }
+    [[nodiscard]] RHIDevice* dev() const {
+        return dev_;
+    }
+    [[nodiscard]] VkDevice device() const {
+        return dev_ ? dev_->device() : VK_NULL_HANDLE;
+    }
 
-private:
+  private:
     [[nodiscard]] VkDescriptorPool createPool();
     [[nodiscard]] VkDescriptorPool grabPool();
 
-    RHIDevice*               dev_         = nullptr;
-    VkDescriptorPool         currentPool_ = VK_NULL_HANDLE;
+    RHIDevice* dev_ = nullptr;
+    VkDescriptorPool currentPool_ = VK_NULL_HANDLE;
     std::vector<VkDescriptorPool> usedPools_;
     std::vector<VkDescriptorPool> freePools_;
     std::vector<VkDescriptorPool> allPools_;
-    size_t                   totalAllocated_ = 0;
+    size_t totalAllocated_ = 0;
 };
 
 // ─── 描述符构建器 ─────────────────────────────────────────────────────────
@@ -117,10 +128,8 @@ private:
  * 使用 DescriptorLayoutCache 使 layout 在相同绑定时复用。
  */
 class DescriptorBuilder {
-public:
-    DescriptorBuilder(DescriptorAllocator& alloc,
-                      DescriptorLayoutCache& cache)
-        : alloc_(&alloc), cache_(&cache) {}
+  public:
+    DescriptorBuilder(DescriptorAllocator& alloc, DescriptorLayoutCache& cache) : alloc_(&alloc), cache_(&cache) {}
 
     // ── 绑定 Buffer ──────────────────────────────────────────────────────
     DescriptorBuilder& bindBuffer(uint32_t binding,
@@ -149,14 +158,14 @@ public:
     /// 仅写入（不分配），set 由外部预先分配
     bool write(VkDescriptorSet set);
 
-private:
-    DescriptorAllocator*   alloc_;
+  private:
+    DescriptorAllocator* alloc_;
     DescriptorLayoutCache* cache_;
 
     std::vector<VkDescriptorSetLayoutBinding> bindings_;
-    std::vector<VkWriteDescriptorSet>         writes_;
-    std::vector<VkDescriptorBufferInfo>       bufInfos_;
-    std::vector<VkDescriptorImageInfo>        imgInfos_;
+    std::vector<VkWriteDescriptorSet> writes_;
+    std::vector<VkDescriptorBufferInfo> bufInfos_;
+    std::vector<VkDescriptorImageInfo> imgInfos_;
 };
 
 } // namespace engine

@@ -29,44 +29,42 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <memory>
 #include <random>
 #include <vector>
 
 // ─── Reservoir 数据结构（CPU 端模拟） ─────────────────────────────────────────
 
 struct LightSample {
-    float position[3];  ///< 光源位置
-    float intensity;    ///< 光源强度
-    int   lightId;      ///< 光源索引
+    float position[3]; ///< 光源位置
+    float intensity;   ///< 光源强度
+    int lightId;       ///< 光源索引
 };
 
 /// @brief Weighted Reservoir Sampling 的核心数据结构
 struct Reservoir {
-    LightSample y{};        ///< 当前最优样本
-    float       wSum = 0.f; ///< 累计权重之和
-    int         M    = 0;   ///< 已处理的候选样本数
-    float       W    = 0.f; ///< 无偏权重（shading 时使用）
+    LightSample y{};  ///< 当前最优样本
+    float wSum = 0.f; ///< 累计权重之和
+    int M = 0;        ///< 已处理的候选样本数
+    float W = 0.f;    ///< 无偏权重（shading 时使用）
 
-    void reset() { wSum = 0.f; M = 0; W = 0.f; }
+    void reset() {
+        wSum = 0.f;
+        M = 0;
+        W = 0.f;
+    }
 };
 
 // ─── 采样算法模拟器 ───────────────────────────────────────────────────────────
 
 class SamplingSimulator {
-public:
+  public:
     explicit SamplingSimulator(int lightCount, int pixelCount)
-        : lightCount_(lightCount)
-        , pixelCount_(pixelCount)
-        , rng_(42)
-        , reservoirs_(size_t(pixelCount))
-        , prevReservoirs_(size_t(pixelCount))
-        , uniformErrors_(MAX_FRAMES)
-        , restirErrors_(MAX_FRAMES)
-    {}
+        : lightCount_(lightCount), pixelCount_(pixelCount), rng_(42), reservoirs_(size_t(pixelCount)),
+          prevReservoirs_(size_t(pixelCount)), uniformErrors_(MAX_FRAMES), restirErrors_(MAX_FRAMES) {}
 
     /// @brief 执行一帧的 ReSTIR 更新，返回当前帧估算误差
-    float stepRestir()
-    {
+    float stepRestir() {
         generateLights();
         float totalErr = 0.f;
         for (int p = 0; p < pixelCount_; ++p) {
@@ -80,8 +78,7 @@ public:
     }
 
     /// @brief 执行一帧的均匀采样，返回当前帧估算误差
-    float stepUniform()
-    {
+    float stepUniform() {
         generateLights();
         float totalErr = 0.f;
         for (int p = 0; p < pixelCount_; ++p) {
@@ -94,34 +91,40 @@ public:
         return err;
     }
 
-    void reset()
-    {
+    void reset() {
         frameIndex_ = 0;
         std::fill(uniformErrors_.begin(), uniformErrors_.end(), 0.f);
         std::fill(restirErrors_.begin(), restirErrors_.end(), 0.f);
-        for (auto& r : reservoirs_)     r.reset();
-        for (auto& r : prevReservoirs_) r.reset();
+        for (auto& r : reservoirs_)
+            r.reset();
+        for (auto& r : prevReservoirs_)
+            r.reset();
     }
 
-    const std::vector<float>& uniformErrors() const { return uniformErrors_; }
-    const std::vector<float>& restirErrors()  const { return restirErrors_; }
-    int                       frameCount()    const { return std::min(frameIndex_, MAX_FRAMES); }
+    const std::vector<float>& uniformErrors() const {
+        return uniformErrors_;
+    }
+    const std::vector<float>& restirErrors() const {
+        return restirErrors_;
+    }
+    int frameCount() const {
+        return std::min(frameIndex_, MAX_FRAMES);
+    }
 
     static constexpr int MAX_FRAMES = 200;
 
-private:
-    int                   lightCount_;
-    int                   pixelCount_;
-    std::mt19937          rng_;
+  private:
+    int lightCount_;
+    int pixelCount_;
+    std::mt19937 rng_;
     std::vector<Reservoir> reservoirs_;
     std::vector<Reservoir> prevReservoirs_;
-    std::vector<float>    uniformErrors_;
-    std::vector<float>    restirErrors_;
+    std::vector<float> uniformErrors_;
+    std::vector<float> restirErrors_;
     std::vector<LightSample> lights_;
-    int                   frameIndex_ = 0;
+    int frameIndex_ = 0;
 
-    void generateLights()
-    {
+    void generateLights() {
         std::uniform_real_distribution<float> pos(-10.f, 10.f);
         std::uniform_real_distribution<float> intensity(0.1f, 5.f);
         lights_.resize(size_t(lightCount_));
@@ -129,13 +132,12 @@ private:
             l.position[0] = pos(rng_);
             l.position[1] = pos(rng_) + 5.f;
             l.position[2] = pos(rng_);
-            l.intensity   = intensity(rng_);
+            l.intensity = intensity(rng_);
         }
     }
 
     /// @brief Weighted Reservoir Sampling 更新函数
-    void updateReservoir(Reservoir& r, const LightSample& x, float w)
-    {
+    void updateReservoir(Reservoir& r, const LightSample& x, float w) {
         r.wSum += w;
         ++r.M;
         std::uniform_real_distribution<float> u(0.f, 1.f);
@@ -144,21 +146,18 @@ private:
     }
 
     /// @brief 合并两个 Reservoir（跨像素/跨帧重用）
-    void combineReservoirs(Reservoir& dst, const Reservoir& src)
-    {
-        if (src.M == 0) return;
+    void combineReservoirs(Reservoir& dst, const Reservoir& src) {
+        if (src.M == 0)
+            return;
         updateReservoir(dst, src.y, src.W * float(src.M));
         dst.M += src.M;
     }
 
-    float computeTargetPdf(const LightSample& s)
-    {
-        return s.intensity / (1.f + s.position[0] * s.position[0]
-                                  + s.position[1] * s.position[1]);
+    float computeTargetPdf(const LightSample& s) {
+        return s.intensity / (1.f + s.position[0] * s.position[0] + s.position[1] * s.position[1]);
     }
 
-    float processPixelRestir(int pixelId)
-    {
+    float processPixelRestir(int pixelId) {
         Reservoir& r = reservoirs_[size_t(pixelId)];
         r.reset();
 
@@ -190,14 +189,13 @@ private:
         return std::fabs(estimate - idealContrib);
     }
 
-    float processPixelUniform(int pixelId)
-    {
+    float processPixelUniform(int pixelId) {
         (void)pixelId;
         // 均匀采样：随机选 1 个光源
         std::uniform_int_distribution<int> d(0, lightCount_ - 1);
-        int   idx  = d(rng_);
-        float pdf  = computeTargetPdf(lights_[size_t(idx)]);
-        float est  = pdf * float(lightCount_);
+        int idx = d(rng_);
+        float pdf = computeTargetPdf(lights_[size_t(idx)]);
+        float est = pdf * float(lightCount_);
 
         float idealContrib = 0.f;
         for (const auto& l : lights_)
@@ -210,15 +208,13 @@ private:
 // ─── 应用类 ───────────────────────────────────────────────────────────────────
 
 class Ch83App : public DemoApp {
-protected:
-    void onInit() override
-    {
+  protected:
+    void onInit() override {
         bgColor_ = {0.05f, 0.04f, 0.10f};
         simulator_ = std::make_unique<SamplingSimulator>(lightCount_, pixelCount_);
     }
 
-    void onUpdate() override
-    {
+    void onUpdate() override {
         if (isRunning_) {
             auto now = std::chrono::steady_clock::now();
             float dt = std::chrono::duration<float>(now - lastTime_).count();
@@ -227,22 +223,21 @@ protected:
             if (accTime_ >= stepInterval_) {
                 accTime_ = 0.f;
                 latestUniformErr_ = simulator_->stepUniform();
-                latestRestirErr_  = simulator_->stepRestir();
+                latestRestirErr_ = simulator_->stepRestir();
             }
         }
     }
 
-    void buildUi() override
-    {
+    void buildUi() override {
         interactive_.buildDebugPanel("第83章：ReSTIR");
         ImGui::Separator();
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(940, 680), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin(
-                "第83章：ReSTIR（Reservoir Spatio-Temporal Importance Resampling）",
-                nullptr))
-        { ImGui::End(); return; }
+        if (!ImGui::Begin("第83章：ReSTIR（Reservoir Spatio-Temporal Importance Resampling）", nullptr)) {
+            ImGui::End();
+            return;
+        }
 
         if (ImGui::BeginTabBar("RestirTabs")) {
             buildTabBackground();
@@ -254,25 +249,23 @@ protected:
         ImGui::End();
     }
 
-private:
+  private:
     std::unique_ptr<SamplingSimulator> simulator_;
 
-    int   lightCount_        = 64;
-    int   pixelCount_        = 128;
-    bool  isRunning_         = false;
-    float stepInterval_      = 0.05f;
-    float accTime_           = 0.f;
-    float latestUniformErr_  = 0.f;
-    float latestRestirErr_   = 0.f;
+    int lightCount_ = 64;
+    int pixelCount_ = 128;
+    bool isRunning_ = false;
+    float stepInterval_ = 0.05f;
+    float accTime_ = 0.f;
+    float latestUniformErr_ = 0.f;
+    float latestRestirErr_ = 0.f;
     std::chrono::steady_clock::time_point lastTime_ = std::chrono::steady_clock::now();
 
-    void buildTabBackground()
-    {
+    void buildTabBackground() {
         if (!ImGui::BeginTabItem("问题背景"))
             return;
 
-        ImGui::TextColored(ImVec4(1, 0.85f, 0.2f, 1),
-            "路径追踪的实时困境与 ReSTIR 的解法");
+        ImGui::TextColored(ImVec4(1, 0.85f, 0.2f, 1), "路径追踪的实时困境与 ReSTIR 的解法");
         ImGui::Separator();
         ImGui::Spacing();
 
@@ -283,15 +276,14 @@ private:
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "传统优化方向的局限：");
-        ImGui::TextWrapped(
-            "// 方法 1：直接从光源采样（Direct Light Sampling）\n"
-            "// 场景有 1000 个面光源时，随机选 1 个，大多数贡献接近 0\n"
-            "// 方差极高，噪点严重\n\n"
-            "// 方法 2：重要性采样（Importance Sampling）\n"
-            "// 根据 BRDF / 光源亮度加权选择采样方向\n"
-            "// 减少方差，但单帧样本数仍然很少\n\n"
-            "// 方法 3：时间累积（TAA / Temporal Accumulation）\n"
-            "// 利用上一帧结果降噪，但快速运动时出现鬼影\n");
+        ImGui::TextWrapped("// 方法 1：直接从光源采样（Direct Light Sampling）\n"
+                           "// 场景有 1000 个面光源时，随机选 1 个，大多数贡献接近 0\n"
+                           "// 方差极高，噪点严重\n\n"
+                           "// 方法 2：重要性采样（Importance Sampling）\n"
+                           "// 根据 BRDF / 光源亮度加权选择采样方向\n"
+                           "// 减少方差，但单帧样本数仍然很少\n\n"
+                           "// 方法 3：时间累积（TAA / Temporal Accumulation）\n"
+                           "// 利用上一帧结果降噪，但快速运动时出现鬼影\n");
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "ReSTIR 的核心洞察：");
@@ -310,88 +302,80 @@ private:
         ImGui::EndTabItem();
     }
 
-    void buildTabReservoir()
-    {
+    void buildTabReservoir() {
         if (!ImGui::BeginTabItem("Reservoir 数据结构"))
             return;
 
-        ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1),
-            "Weighted Reservoir Sampling（WRS）");
+        ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1), "Weighted Reservoir Sampling（WRS）");
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextWrapped(
-            "// Reservoir = 一个像素当前维护的\"最优光源候选\"\n"
-            "struct Reservoir {\n"
-            "    LightSample y;      // 当前最优样本（最有可能对此像素有贡献的光源）\n"
-            "    float       wSum;   // 已处理所有候选样本的权重之和\n"
-            "    int         M;      // 已处理的候选样本数量\n"
-            "    float       W;      // 无偏权重（Shading 时：radiance * W = 正确估计）\n"
-            "};\n");
+        ImGui::TextWrapped("// Reservoir = 一个像素当前维护的\"最优光源候选\"\n"
+                           "struct Reservoir {\n"
+                           "    LightSample y;      // 当前最优样本（最有可能对此像素有贡献的光源）\n"
+                           "    float       wSum;   // 已处理所有候选样本的权重之和\n"
+                           "    int         M;      // 已处理的候选样本数量\n"
+                           "    float       W;      // 无偏权重（Shading 时：radiance * W = 正确估计）\n"
+                           "};\n");
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "更新函数（添加一个候选样本）：");
-        ImGui::TextWrapped(
-            "// WRS 流算法：处理无限样本流，内存 O(1)\n"
-            "void updateReservoir(Reservoir& r, LightSample x, float w) {\n"
-            "    r.wSum += w;                        // 累加权重\n"
-            "    r.M++;\n"
-            "    if (random() < w / r.wSum)          // 概率采样（关键！）\n"
-            "        r.y = x;                        // 以概率 w/wSum 替换当前最优\n"
-            "}\n"
-            "// 数学性质：函数结束后，r.y 被选中的概率 = w_i / sum(所有w)\n"
-            "// 这正是重要性采样所需要的！\n");
+        ImGui::TextWrapped("// WRS 流算法：处理无限样本流，内存 O(1)\n"
+                           "void updateReservoir(Reservoir& r, LightSample x, float w) {\n"
+                           "    r.wSum += w;                        // 累加权重\n"
+                           "    r.M++;\n"
+                           "    if (random() < w / r.wSum)          // 概率采样（关键！）\n"
+                           "        r.y = x;                        // 以概率 w/wSum 替换当前最优\n"
+                           "}\n"
+                           "// 数学性质：函数结束后，r.y 被选中的概率 = w_i / sum(所有w)\n"
+                           "// 这正是重要性采样所需要的！\n");
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "合并函数（跨像素/跨帧重用）：");
-        ImGui::TextWrapped(
-            "// 合并两个 Reservoir（核心：允许跨像素/跨帧重用样本）\n"
-            "void combineReservoirs(Reservoir& dst, Reservoir src) {\n"
-            "    // src.W * src.M = src 中最优样本的\"有效权重\"\n"
-            "    updateReservoir(dst, src.y, src.W * src.M);\n"
-            "    dst.M += src.M;                     // 合并已处理样本计数\n"
-            "}\n"
-            "// 合并 N 个邻居的 Reservoir，相当于同时处理了 N 倍样本\n");
+        ImGui::TextWrapped("// 合并两个 Reservoir（核心：允许跨像素/跨帧重用样本）\n"
+                           "void combineReservoirs(Reservoir& dst, Reservoir src) {\n"
+                           "    // src.W * src.M = src 中最优样本的\"有效权重\"\n"
+                           "    updateReservoir(dst, src.y, src.W * src.M);\n"
+                           "    dst.M += src.M;                     // 合并已处理样本计数\n"
+                           "}\n"
+                           "// 合并 N 个邻居的 Reservoir，相当于同时处理了 N 倍样本\n");
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "无偏权重计算（Shading 前）：");
-        ImGui::TextWrapped(
-            "// 计算输出权重 W（用于最终 Shading）\n"
-            "void finalizeReservoir(Reservoir& r, float targetPdf) {\n"
-            "    // 如果 targetPdf = 0（样本不可见），W = 0\n"
-            "    r.W = (targetPdf > 0) ? r.wSum / (targetPdf * r.M) : 0;\n"
-            "}\n"
-            "// 使用方式：\n"
-            "// radiance = evaluateRadiance(r.y) * r.W;\n"
-            "// 当 M 很大时（积累了很多帧），r.W 趋向于真实解\n");
+        ImGui::TextWrapped("// 计算输出权重 W（用于最终 Shading）\n"
+                           "void finalizeReservoir(Reservoir& r, float targetPdf) {\n"
+                           "    // 如果 targetPdf = 0（样本不可见），W = 0\n"
+                           "    r.W = (targetPdf > 0) ? r.wSum / (targetPdf * r.M) : 0;\n"
+                           "}\n"
+                           "// 使用方式：\n"
+                           "// radiance = evaluateRadiance(r.y) * r.W;\n"
+                           "// 当 M 很大时（积累了很多帧），r.W 趋向于真实解\n");
         ImGui::Spacing();
 
         ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1), "ReSTIR DI 完整流程（GPU Shader）：");
-        ImGui::TextWrapped(
-            "// Pass 1：Initial Sampling（每像素处理 K 个候选光源）\n"
-            "for (int i = 0; i < K; ++i) {\n"
-            "    LightSample x = uniformSampleLight(random());\n"
-            "    float w = targetPdf(x) / sourcePdf(x);  // MIS 权重\n"
-            "    updateReservoir(reservoir[pixelId], x, w);\n"
-            "}\n\n"
-            "// Pass 2：Temporal Reuse（合并上一帧）\n"
-            "ivec2 prevCoord = reproject(pixelId, motionVector[pixelId]);\n"
-            "if (isValid(prevCoord))\n"
-            "    combineReservoirs(reservoir[pixelId], prevReservoir[prevCoord]);\n\n"
-            "// Pass 3：Spatial Reuse（合并 K 个邻居）\n"
-            "for (int k = 0; k < K_SPATIAL; ++k) {\n"
-            "    ivec2 neighbor = pixelId + randomOffset(radius);\n"
-            "    combineReservoirs(reservoir[pixelId], reservoir[neighbor]);\n"
-            "}\n\n"
-            "// Pass 4：Shading\n"
-            "finalizeReservoir(reservoir[pixelId], targetPdf(reservoir[pixelId].y));\n"
-            "color[pixelId] = shade(reservoir[pixelId].y) * reservoir[pixelId].W;\n");
+        ImGui::TextWrapped("// Pass 1：Initial Sampling（每像素处理 K 个候选光源）\n"
+                           "for (int i = 0; i < K; ++i) {\n"
+                           "    LightSample x = uniformSampleLight(random());\n"
+                           "    float w = targetPdf(x) / sourcePdf(x);  // MIS 权重\n"
+                           "    updateReservoir(reservoir[pixelId], x, w);\n"
+                           "}\n\n"
+                           "// Pass 2：Temporal Reuse（合并上一帧）\n"
+                           "ivec2 prevCoord = reproject(pixelId, motionVector[pixelId]);\n"
+                           "if (isValid(prevCoord))\n"
+                           "    combineReservoirs(reservoir[pixelId], prevReservoir[prevCoord]);\n\n"
+                           "// Pass 3：Spatial Reuse（合并 K 个邻居）\n"
+                           "for (int k = 0; k < K_SPATIAL; ++k) {\n"
+                           "    ivec2 neighbor = pixelId + randomOffset(radius);\n"
+                           "    combineReservoirs(reservoir[pixelId], reservoir[neighbor]);\n"
+                           "}\n\n"
+                           "// Pass 4：Shading\n"
+                           "finalizeReservoir(reservoir[pixelId], targetPdf(reservoir[pixelId].y));\n"
+                           "color[pixelId] = shade(reservoir[pixelId].y) * reservoir[pixelId].W;\n");
 
         ImGui::EndTabItem();
     }
 
-    void buildTabAlgorithm()
-    {
+    void buildTabAlgorithm() {
         if (!ImGui::BeginTabItem("算法流程详解"))
             return;
 
@@ -402,7 +386,7 @@ private:
         struct Phase {
             const char* title;
             const char* detail;
-            ImVec4      color;
+            ImVec4 color;
         };
         Phase phases[] = {
             {"① Initial Sampling（初始候选采样）",
@@ -447,20 +431,18 @@ private:
         ImGui::EndTabItem();
     }
 
-    void buildTabSimulation()
-    {
+    void buildTabSimulation() {
         if (!ImGui::BeginTabItem("CPU 端模拟演示"))
             return;
 
-        ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1),
-            "Mac 光栅化近似：CPU 模拟 Reservoir 收敛速度");
+        ImGui::TextColored(ImVec4(0.4f, 0.9f, 1.0f, 1), "Mac 光栅化近似：CPU 模拟 Reservoir 收敛速度");
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextWrapped(
-            "由于 macOS 不支持光线追踪，本演示在 CPU 端模拟 Reservoir 采样。\n"
-            "模拟场景：%d 个像素，每帧 %d 个随机光源，比较两种采样策略的收敛误差。",
-            pixelCount_, lightCount_);
+        ImGui::TextWrapped("由于 macOS 不支持光线追踪，本演示在 CPU 端模拟 Reservoir 采样。\n"
+                           "模拟场景：%d 个像素，每帧 %d 个随机光源，比较两种采样策略的收敛误差。",
+                           pixelCount_,
+                           lightCount_);
         ImGui::Spacing();
 
         // ── 控制面板 ──────────────────────────────────────────────────────────
@@ -474,14 +456,14 @@ private:
 
         if (ImGui::Button(isRunning_ ? "⏸ 暂停" : "▶ 开始运行")) {
             isRunning_ = !isRunning_;
-            lastTime_  = std::chrono::steady_clock::now();
+            lastTime_ = std::chrono::steady_clock::now();
         }
         ImGui::SameLine();
         if (ImGui::Button("🔄 重置")) {
             simulator_->reset();
             isRunning_ = false;
             latestUniformErr_ = 0.f;
-            latestRestirErr_  = 0.f;
+            latestRestirErr_ = 0.f;
         }
 
         ImGui::Spacing();
@@ -493,20 +475,15 @@ private:
         ImGui::Text("已模拟帧数：%d / %d", frames, SamplingSimulator::MAX_FRAMES);
         ImGui::Spacing();
 
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1),
-            "均匀采样当前误差：%.4f", latestUniformErr_);
-        ImGui::ProgressBar(
-            std::min(latestUniformErr_ / 2.f, 1.f), ImVec2(-1, 16));
+        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "均匀采样当前误差：%.4f", latestUniformErr_);
+        ImGui::ProgressBar(std::min(latestUniformErr_ / 2.f, 1.f), ImVec2(-1, 16));
 
-        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1),
-            "ReSTIR    当前误差：%.4f", latestRestirErr_);
-        ImGui::ProgressBar(
-            std::min(latestRestirErr_ / 2.f, 1.f), ImVec2(-1, 16));
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "ReSTIR    当前误差：%.4f", latestRestirErr_);
+        ImGui::ProgressBar(std::min(latestRestirErr_ / 2.f, 1.f), ImVec2(-1, 16));
 
         if (latestUniformErr_ > 0.f && latestRestirErr_ > 0.f) {
             float ratio = latestUniformErr_ / latestRestirErr_;
-            ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1),
-                "误差比值（均匀 / ReSTIR）：%.2fx", ratio);
+            ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1), "误差比值（均匀 / ReSTIR）：%.2fx", ratio);
         }
         ImGui::Spacing();
 
@@ -515,8 +492,7 @@ private:
             const auto& uErr = simulator_->uniformErrors();
             const auto& rErr = simulator_->restirErrors();
 
-            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1),
-                "误差收敛曲线（帧数 → 误差，越低越好）：");
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1), "误差收敛曲线（帧数 → 误差，越低越好）：");
 
             // 归一化到相同比例
             float maxErr = 0.f;
@@ -532,14 +508,10 @@ private:
             }
 
             ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "均匀采样误差");
-            ImGui::PlotLines("##uniform",
-                uNorm.data(), frames,
-                0, nullptr, 0.f, 1.f, ImVec2(-1, 60));
+            ImGui::PlotLines("##uniform", uNorm.data(), frames, 0, nullptr, 0.f, 1.f, ImVec2(-1, 60));
 
             ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "ReSTIR 误差");
-            ImGui::PlotLines("##restir",
-                rNorm.data(), frames,
-                0, nullptr, 0.f, 1.f, ImVec2(-1, 60));
+            ImGui::PlotLines("##restir", rNorm.data(), frames, 0, nullptr, 0.f, 1.f, ImVec2(-1, 60));
         } else {
             ImGui::TextDisabled("（点击[开始运行]查看收敛曲线）");
         }
@@ -557,8 +529,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════════\n";
     std::cout << " 第83章：ReSTIR（Reservoir Spatio-Temporal Importance Resampling）\n";
     std::cout << " Vulkan 现代渲染技术系列 — ch83\n";

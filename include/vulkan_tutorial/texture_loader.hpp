@@ -21,24 +21,23 @@ namespace vulkan_tutorial {
 
 struct ImageData {
     std::vector<uint8_t> pixels;
-    uint32_t             width  = 0;
-    uint32_t             height = 0;
-    uint32_t             channels = 0;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t channels = 0;
 };
 
 struct TextureImage {
-    VkImage        image       = VK_NULL_HANDLE;
-    VkDeviceMemory memory      = VK_NULL_HANDLE;
-    VkImageView    view        = VK_NULL_HANDLE;
-    VkSampler      sampler     = VK_NULL_HANDLE;
-    VkFormat       format      = VK_FORMAT_UNDEFINED;
-    uint32_t       width       = 0;
-    uint32_t       height      = 0;
-    uint32_t       mipLevels   = 1;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkSampler sampler = VK_NULL_HANDLE;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    uint32_t mipLevels = 1;
 };
 
-inline ImageData loadImageFromFile(const std::string& path, int desiredChannels = 0)
-{
+inline ImageData loadImageFromFile(const std::string& path, int desiredChannels = 0) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
         throw std::runtime_error("无法打开图像: " + path);
@@ -50,8 +49,7 @@ inline ImageData loadImageFromFile(const std::string& path, int desiredChannels 
     int height = 0;
     int channels = 0;
     stbi_uc* pixels = stbi_load_from_memory(
-        buffer.data(), static_cast<int>(buffer.size()),
-        &width, &height, &channels, desiredChannels);
+        buffer.data(), static_cast<int>(buffer.size()), &width, &height, &channels, desiredChannels);
     if (!pixels)
         throw std::runtime_error("stb_image 解析失败: " + path);
     const int outChannels = desiredChannels != 0 ? desiredChannels : channels;
@@ -60,14 +58,12 @@ inline ImageData loadImageFromFile(const std::string& path, int desiredChannels 
     result.height = static_cast<uint32_t>(height);
     result.channels = static_cast<uint32_t>(outChannels);
     result.pixels.resize(static_cast<size_t>(width * height * outChannels));
-    std::memcpy(result.pixels.data(), pixels,
-                static_cast<size_t>(width * height * outChannels));
+    std::memcpy(result.pixels.data(), pixels, static_cast<size_t>(width * height * outChannels));
     stbi_image_free(pixels);
     return result;
 }
 
-inline ImageData generateCheckerboard(uint32_t size, uint32_t tileSize)
-{
+inline ImageData generateCheckerboard(uint32_t size, uint32_t tileSize) {
     ImageData img;
     img.width = size;
     img.height = size;
@@ -86,8 +82,7 @@ inline ImageData generateCheckerboard(uint32_t size, uint32_t tileSize)
     return img;
 }
 
-inline ImageData generateBrickDiffuse(uint32_t size)
-{
+inline ImageData generateBrickDiffuse(uint32_t size) {
     ImageData img;
     img.width = size;
     img.height = size;
@@ -114,8 +109,7 @@ inline ImageData generateBrickDiffuse(uint32_t size)
     return img;
 }
 
-inline ImageData generateBrickNormal(uint32_t size)
-{
+inline ImageData generateBrickNormal(uint32_t size) {
     ImageData img;
     img.width = size;
     img.height = size;
@@ -139,8 +133,7 @@ inline ImageData generateBrickNormal(uint32_t size)
     return img;
 }
 
-inline ImageData generateSkyGradient(uint32_t size)
-{
+inline ImageData generateSkyGradient(uint32_t size) {
     ImageData img;
     img.width = size;
     img.height = size;
@@ -159,33 +152,35 @@ inline ImageData generateSkyGradient(uint32_t size)
     return img;
 }
 
-inline VkFormat channelsToFormat(uint32_t channels)
-{
-    if (channels == 4) return VK_FORMAT_R8G8B8A8_SRGB;
-    if (channels == 3) return VK_FORMAT_R8G8B8_SRGB;
-    if (channels == 1) return VK_FORMAT_R8_UNORM;
+inline VkFormat channelsToFormat(uint32_t channels) {
+    if (channels == 4)
+        return VK_FORMAT_R8G8B8A8_SRGB;
+    if (channels == 3)
+        return VK_FORMAT_R8G8B8_SRGB;
+    if (channels == 1)
+        return VK_FORMAT_R8_UNORM;
     throw std::runtime_error("不支持的通道数");
 }
 
-inline uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice,
-                                    uint32_t typeFilter,
-                                    VkMemoryPropertyFlags properties)
-{
+inline uint32_t
+findMemoryTypeIndex(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties{};
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-        if ((typeFilter & (1u << i)) &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        if ((typeFilter & (1u << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
             return i;
     }
     throw std::runtime_error("找不到合适的内存类型");
 }
 
-inline void transitionImageLayout(VkDevice device, VkCommandPool commandPool,
-                                  VkQueue queue, VkImage image,
-                                  VkFormat format, VkImageLayout oldLayout,
-                                  VkImageLayout newLayout, uint32_t mipLevels = 1)
-{
+inline void transitionImageLayout(VkDevice device,
+                                  VkCommandPool commandPool,
+                                  VkQueue queue,
+                                  VkImage image,
+                                  VkFormat format,
+                                  VkImageLayout oldLayout,
+                                  VkImageLayout newLayout,
+                                  uint32_t mipLevels = 1) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -211,8 +206,7 @@ inline void transitionImageLayout(VkDevice device, VkCommandPool commandPool,
     barrier.subresourceRange.layerCount = 1;
     VkPipelineStageFlags srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-        newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -223,8 +217,7 @@ inline void transitionImageLayout(VkDevice device, VkCommandPool commandPool,
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
-               newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+    } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
@@ -233,8 +226,7 @@ inline void transitionImageLayout(VkDevice device, VkCommandPool commandPool,
         (void)format;
         throw std::runtime_error("不支持的布局转换");
     }
-    vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0,
-                         0, nullptr, 0, nullptr, 1, &barrier);
+    vkCmdPipelineBarrier(commandBuffer, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
     vkEndCommandBuffer(commandBuffer);
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -245,10 +237,13 @@ inline void transitionImageLayout(VkDevice device, VkCommandPool commandPool,
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-inline void copyBufferToImage(VkDevice device, VkCommandPool commandPool,
-                              VkQueue queue, VkBuffer buffer, VkImage image,
-                              uint32_t width, uint32_t height)
-{
+inline void copyBufferToImage(VkDevice device,
+                              VkCommandPool commandPool,
+                              VkQueue queue,
+                              VkBuffer buffer,
+                              VkImage image,
+                              uint32_t width,
+                              uint32_t height) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -266,8 +261,7 @@ inline void copyBufferToImage(VkDevice device, VkCommandPool commandPool,
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
     region.imageExtent = {width, height, 1};
-    vkCmdCopyBufferToImage(commandBuffer, buffer, image,
-                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     vkEndCommandBuffer(commandBuffer);
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -278,19 +272,18 @@ inline void copyBufferToImage(VkDevice device, VkCommandPool commandPool,
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-inline TextureImage createTextureFromImageData(
-    VkPhysicalDevice physicalDevice, VkDevice device,
-    VkCommandPool commandPool, VkQueue queue,
-    const ImageData& imageData, bool srgb = true)
-{
+inline TextureImage createTextureFromImageData(VkPhysicalDevice physicalDevice,
+                                               VkDevice device,
+                                               VkCommandPool commandPool,
+                                               VkQueue queue,
+                                               const ImageData& imageData,
+                                               bool srgb = true) {
     TextureImage texture{};
     texture.width = imageData.width;
     texture.height = imageData.height;
     texture.mipLevels = 1;
-    texture.format = srgb ? channelsToFormat(imageData.channels)
-                          : VK_FORMAT_R8G8B8A8_UNORM;
-    const VkDeviceSize imageSize = static_cast<VkDeviceSize>(
-        imageData.width * imageData.height * imageData.channels);
+    texture.format = srgb ? channelsToFormat(imageData.channels) : VK_FORMAT_R8G8B8A8_UNORM;
+    const VkDeviceSize imageSize = static_cast<VkDeviceSize>(imageData.width * imageData.height * imageData.channels);
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
     VkBufferCreateInfo bufferInfo{};
@@ -304,9 +297,10 @@ inline TextureImage createTextureFromImageData(
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memReq.size;
-    allocInfo.memoryTypeIndex = findMemoryTypeIndex(
-        physicalDevice, memReq.memoryTypeBits,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    allocInfo.memoryTypeIndex =
+        findMemoryTypeIndex(physicalDevice,
+                            memReq.memoryTypeBits,
+                            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
     VK_CHECK(vkAllocateMemory(device, &allocInfo, nullptr, &stagingMemory));
     VK_CHECK(vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0));
     void* mapped = nullptr;
@@ -328,15 +322,23 @@ inline TextureImage createTextureFromImageData(
     VK_CHECK(vkCreateImage(device, &imageInfo, nullptr, &texture.image));
     vkGetImageMemoryRequirements(device, texture.image, &memReq);
     allocInfo.allocationSize = memReq.size;
-    allocInfo.memoryTypeIndex = findMemoryTypeIndex(
-        physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    allocInfo.memoryTypeIndex =
+        findMemoryTypeIndex(physicalDevice, memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
     VK_CHECK(vkAllocateMemory(device, &allocInfo, nullptr, &texture.memory));
     VK_CHECK(vkBindImageMemory(device, texture.image, texture.memory, 0));
-    transitionImageLayout(device, commandPool, queue, texture.image, texture.format,
-                          VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(device, commandPool, queue, stagingBuffer, texture.image,
-                      imageData.width, imageData.height);
-    transitionImageLayout(device, commandPool, queue, texture.image, texture.format,
+    transitionImageLayout(device,
+                          commandPool,
+                          queue,
+                          texture.image,
+                          texture.format,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(device, commandPool, queue, stagingBuffer, texture.image, imageData.width, imageData.height);
+    transitionImageLayout(device,
+                          commandPool,
+                          queue,
+                          texture.image,
+                          texture.format,
                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vkDestroyBuffer(device, stagingBuffer, nullptr);
@@ -369,8 +371,7 @@ inline TextureImage createTextureFromImageData(
     return texture;
 }
 
-inline void destroyTexture(VkDevice device, TextureImage& texture)
-{
+inline void destroyTexture(VkDevice device, TextureImage& texture) {
     if (texture.sampler != VK_NULL_HANDLE)
         vkDestroySampler(device, texture.sampler, nullptr);
     if (texture.view != VK_NULL_HANDLE)
@@ -382,9 +383,7 @@ inline void destroyTexture(VkDevice device, TextureImage& texture)
     texture = {};
 }
 
-inline ImageData loadImageWithFallback(const std::string& relativePath,
-                                       const ImageData& fallback)
-{
+inline ImageData loadImageWithFallback(const std::string& relativePath, const ImageData& fallback) {
     const std::string path = resolveAssetPath(relativePath);
     try {
         return loadImageFromFile(path);

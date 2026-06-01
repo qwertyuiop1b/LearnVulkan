@@ -30,23 +30,22 @@ namespace engine {
 
 // ─── 参数值类型 ──────────────────────────────────────────────────────────
 
-using ParamValue = std::variant<
-    float,
-    glm::vec2,
-    glm::vec4,
-    int32_t,
-    glm::mat4,
-    Texture*      // 纹理槽（弱引用，由 TextureCache 持有生命周期）
->;
+using ParamValue = std::variant<float,
+                                glm::vec2,
+                                glm::vec4,
+                                int32_t,
+                                glm::mat4,
+                                Texture* // 纹理槽（弱引用，由 TextureCache 持有生命周期）
+                                >;
 
 // ─── 参数槽定义 ──────────────────────────────────────────────────────────
 
 struct ParamSlot {
-    std::string  name;
-    uint32_t     binding     = 0;
-    uint32_t     set         = 0;
+    std::string name;
+    uint32_t binding = 0;
+    uint32_t set = 0;
     VkDescriptorType descType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    ParamValue   defaultValue;   ///< 默认值（MaterialInstance 未覆盖时用这个）
+    ParamValue defaultValue; ///< 默认值（MaterialInstance 未覆盖时用这个）
 };
 
 // ─── Material ─────────────────────────────────────────────────────────────
@@ -58,13 +57,15 @@ struct ParamSlot {
  * 不直接持有 GPU 数据（由 MaterialInstance 持有）。
  */
 class Material {
-public:
+  public:
     std::string name;
-    VkPipeline             pipeline = VK_NULL_HANDLE;
-    VkPipelineLayout       pipelineLayout = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
     std::vector<ParamSlot> slots;
 
-    void addSlot(const ParamSlot& slot) { slots.push_back(slot); }
+    void addSlot(const ParamSlot& slot) {
+        slots.push_back(slot);
+    }
     [[nodiscard]] const ParamSlot* findSlot(const std::string& name) const;
 };
 
@@ -89,7 +90,7 @@ public:
  * @endcode
  */
 class MaterialInstance {
-public:
+  public:
     MaterialInstance(const Material* mat, uint32_t frameCount);
     ~MaterialInstance();
 
@@ -100,33 +101,34 @@ public:
     [[nodiscard]] const ParamValue* get(const std::string& name) const;
 
     /// 更新 UBO + 写 Descriptor
-    void updateDescriptors(RHIDevice& dev,
-                           DescriptorAllocator& alloc,
-                           DescriptorLayoutCache& cache,
-                           uint32_t frameIndex);
+    void
+    updateDescriptors(RHIDevice& dev, DescriptorAllocator& alloc, DescriptorLayoutCache& cache, uint32_t frameIndex);
 
     /// 绑定到命令缓冲区（设置管线 + 描述符集）
-    void bind(VkCommandBuffer cmd, uint32_t frameIndex,
-              uint32_t firstSet = 0) const;
+    void bind(VkCommandBuffer cmd, uint32_t frameIndex, uint32_t firstSet = 0) const;
 
-    [[nodiscard]] const Material* material() const { return mat_; }
-    [[nodiscard]] uint32_t        id()        const { return id_; }
+    [[nodiscard]] const Material* material() const {
+        return mat_;
+    }
+    [[nodiscard]] uint32_t id() const {
+        return id_;
+    }
 
-    void destroyBuffers();   ///< 由 MaterialLibrary 调用
+    void destroyBuffers(); ///< 由 MaterialLibrary 调用
 
-private:
+  private:
     friend class MaterialLibrary;
 
-    const Material*     mat_ = nullptr;
-    uint32_t            id_  = 0;
-    uint32_t            frameCount_ = 2;
+    const Material* mat_ = nullptr;
+    uint32_t id_ = 0;
+    uint32_t frameCount_ = 2;
 
-    std::unordered_map<std::string, ParamValue> params_;  // 覆盖值
+    std::unordered_map<std::string, ParamValue> params_; // 覆盖值
 
     // GPU 端：UBO（向量 / 矩阵参数打包后上传）
-    std::vector<Buffer>          ubos_;        // per-frame
-    std::vector<void*>           uboMapped_;
-    std::vector<VkDescriptorSet> descSets_;    // per-frame
+    std::vector<Buffer> ubos_; // per-frame
+    std::vector<void*> uboMapped_;
+    std::vector<VkDescriptorSet> descSets_; // per-frame
 
     static uint32_t s_nextId;
 };
@@ -135,12 +137,12 @@ private:
 
 /// 标准 PBR 参数（对齐到 GPU std140）
 struct PBRParams {
-    alignas(16) glm::vec4 albedo     {1, 1, 1, 1};
-    alignas( 4) float     metallic   = 0.0f;
-    alignas( 4) float     roughness  = 0.5f;
-    alignas( 4) float     ao         = 1.0f;
-    alignas( 4) float     emissive   = 0.0f;
-    alignas(16) glm::vec4 emissiveColor{0,0,0,0};
+    alignas(16) glm::vec4 albedo{1, 1, 1, 1};
+    alignas(4) float metallic = 0.0f;
+    alignas(4) float roughness = 0.5f;
+    alignas(4) float ao = 1.0f;
+    alignas(4) float emissive = 0.0f;
+    alignas(16) glm::vec4 emissiveColor{0, 0, 0, 0};
 };
 
 // ─── MaterialLibrary ──────────────────────────────────────────────────────
@@ -171,7 +173,7 @@ struct PBRParams {
  * @endcode
  */
 class MaterialLibrary {
-public:
+  public:
     void init(RHIDevice& dev, uint32_t frameCount);
     void destroy();
 
@@ -179,9 +181,7 @@ public:
     void registerMaterial(std::unique_ptr<Material> mat);
 
     /// 注册标准 PBR 材质（自动设置参数槽）
-    void registerPBR(const std::string& name,
-                     VkPipeline pipeline,
-                     VkPipelineLayout pipelineLayout);
+    void registerPBR(const std::string& name, VkPipeline pipeline, VkPipelineLayout pipelineLayout);
 
     /// 根据材质名字创建实例
     [[nodiscard]] MaterialInstance* instantiate(const std::string& materialName);
@@ -192,17 +192,21 @@ public:
     /// 每帧更新所有 dirty 的 instance 的描述符
     void updateAll(uint32_t frameIndex);
 
-    [[nodiscard]] size_t materialCount()  const { return materials_.size(); }
-    [[nodiscard]] size_t instanceCount()  const { return instances_.size(); }
+    [[nodiscard]] size_t materialCount() const {
+        return materials_.size();
+    }
+    [[nodiscard]] size_t instanceCount() const {
+        return instances_.size();
+    }
 
-private:
-    RHIDevice*   dev_        = nullptr;
-    uint32_t     frameCount_ = 2;
+  private:
+    RHIDevice* dev_ = nullptr;
+    uint32_t frameCount_ = 2;
 
-    std::unordered_map<std::string, std::unique_ptr<Material>>         materials_;
-    std::vector<std::unique_ptr<MaterialInstance>>                     instances_;
+    std::unordered_map<std::string, std::unique_ptr<Material>> materials_;
+    std::vector<std::unique_ptr<MaterialInstance>> instances_;
 
-    DescriptorAllocator   allocator_;
+    DescriptorAllocator allocator_;
     DescriptorLayoutCache layoutCache_;
 };
 

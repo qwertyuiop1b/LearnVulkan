@@ -8,29 +8,24 @@
 
 namespace vulkan_tutorial {
 
-static std::string parentDirectory(const std::string& path)
-{
+static std::string parentDirectory(const std::string& path) {
     const std::filesystem::path p(path);
     return p.parent_path().string();
 }
 
-static glm::vec3 readVec3(const float* data)
-{
+static glm::vec3 readVec3(const float* data) {
     return glm::vec3(data[0], data[1], data[2]);
 }
 
-static glm::vec2 readVec2(const float* data)
-{
+static glm::vec2 readVec2(const float* data) {
     return glm::vec2(data[0], data[1]);
 }
 
-static glm::vec4 readVec4(const float* data)
-{
+static glm::vec4 readVec4(const float* data) {
     return glm::vec4(data[0], data[1], data[2], data[3]);
 }
 
-static void appendPrimitive(const cgltf_primitive& primitive, GltfMeshPrimitive& out)
-{
+static void appendPrimitive(const cgltf_primitive& primitive, GltfMeshPrimitive& out) {
     cgltf_accessor* posAcc = nullptr;
     cgltf_accessor* normAcc = nullptr;
     cgltf_accessor* tanAcc = nullptr;
@@ -40,13 +35,26 @@ static void appendPrimitive(const cgltf_primitive& primitive, GltfMeshPrimitive&
     for (size_t i = 0; i < primitive.attributes_count; ++i) {
         const cgltf_attribute& attr = primitive.attributes[i];
         switch (attr.type) {
-        case cgltf_attribute_type_position: posAcc = attr.data; break;
-        case cgltf_attribute_type_normal: normAcc = attr.data; break;
-        case cgltf_attribute_type_tangent: tanAcc = attr.data; break;
-        case cgltf_attribute_type_texcoord: uvAcc = attr.data; break;
-        case cgltf_attribute_type_joints: jointAcc = attr.data; break;
-        case cgltf_attribute_type_weights: weightAcc = attr.data; break;
-        default: break;
+        case cgltf_attribute_type_position:
+            posAcc = attr.data;
+            break;
+        case cgltf_attribute_type_normal:
+            normAcc = attr.data;
+            break;
+        case cgltf_attribute_type_tangent:
+            tanAcc = attr.data;
+            break;
+        case cgltf_attribute_type_texcoord:
+            uvAcc = attr.data;
+            break;
+        case cgltf_attribute_type_joints:
+            jointAcc = attr.data;
+            break;
+        case cgltf_attribute_type_weights:
+            weightAcc = attr.data;
+            break;
+        default:
+            break;
         }
     }
     if (!posAcc)
@@ -94,8 +102,7 @@ static void appendPrimitive(const cgltf_primitive& primitive, GltfMeshPrimitive&
     }
 }
 
-GltfScene loadGltfScene(const std::string& relativePath)
-{
+GltfScene loadGltfScene(const std::string& relativePath) {
     const std::string path = resolveAssetPath(relativePath);
     cgltf_options options{};
     cgltf_data* data = nullptr;
@@ -115,20 +122,19 @@ GltfScene loadGltfScene(const std::string& relativePath)
         if (mat.has_pbr_metallic_roughness) {
             const cgltf_pbr_metallic_roughness& pbr = mat.pbr_metallic_roughness;
             out.baseColorFactor = glm::vec4(
-                pbr.base_color_factor[0], pbr.base_color_factor[1],
-                pbr.base_color_factor[2], pbr.base_color_factor[3]);
+                pbr.base_color_factor[0], pbr.base_color_factor[1], pbr.base_color_factor[2], pbr.base_color_factor[3]);
             out.metallicFactor = pbr.metallic_factor;
             out.roughnessFactor = pbr.roughness_factor;
             if (pbr.base_color_texture.texture && pbr.base_color_texture.texture->image)
-                out.baseColorTexture = pbr.base_color_texture.texture->image->uri ?
-                    pbr.base_color_texture.texture->image->uri : "";
+                out.baseColorTexture =
+                    pbr.base_color_texture.texture->image->uri ? pbr.base_color_texture.texture->image->uri : "";
             if (pbr.metallic_roughness_texture.texture && pbr.metallic_roughness_texture.texture->image)
-                out.metallicRoughnessTexture = pbr.metallic_roughness_texture.texture->image->uri ?
-                    pbr.metallic_roughness_texture.texture->image->uri : "";
+                out.metallicRoughnessTexture = pbr.metallic_roughness_texture.texture->image->uri
+                                                   ? pbr.metallic_roughness_texture.texture->image->uri
+                                                   : "";
         }
         if (mat.normal_texture.texture && mat.normal_texture.texture->image)
-            out.normalTexture = mat.normal_texture.texture->image->uri ?
-                mat.normal_texture.texture->image->uri : "";
+            out.normalTexture = mat.normal_texture.texture->image->uri ? mat.normal_texture.texture->image->uri : "";
     }
     for (size_t meshIndex = 0; meshIndex < data->meshes_count; ++meshIndex) {
         const cgltf_mesh& mesh = data->meshes[meshIndex];
@@ -136,8 +142,7 @@ GltfScene loadGltfScene(const std::string& relativePath)
             GltfMeshPrimitive primitive;
             appendPrimitive(mesh.primitives[p], primitive);
             if (mesh.primitives[p].material)
-                primitive.materialIndex = static_cast<int32_t>(
-                    mesh.primitives[p].material - data->materials);
+                primitive.materialIndex = static_cast<int32_t>(mesh.primitives[p].material - data->materials);
             scene.meshes.push_back(std::move(primitive));
         }
     }
@@ -153,11 +158,22 @@ GltfScene loadGltfScene(const std::string& relativePath)
             for (size_t j = 0; j < skin.inverse_bind_matrices->count; ++j) {
                 float matrix[16] = {};
                 cgltf_accessor_read_float(skin.inverse_bind_matrices, j, matrix, 16);
-                outSkin.inverseBindMatrices[j] = glm::mat4(
-                    matrix[0], matrix[1], matrix[2], matrix[3],
-                    matrix[4], matrix[5], matrix[6], matrix[7],
-                    matrix[8], matrix[9], matrix[10], matrix[11],
-                    matrix[12], matrix[13], matrix[14], matrix[15]);
+                outSkin.inverseBindMatrices[j] = glm::mat4(matrix[0],
+                                                           matrix[1],
+                                                           matrix[2],
+                                                           matrix[3],
+                                                           matrix[4],
+                                                           matrix[5],
+                                                           matrix[6],
+                                                           matrix[7],
+                                                           matrix[8],
+                                                           matrix[9],
+                                                           matrix[10],
+                                                           matrix[11],
+                                                           matrix[12],
+                                                           matrix[13],
+                                                           matrix[14],
+                                                           matrix[15]);
             }
         }
     }
@@ -170,10 +186,8 @@ GltfScene loadGltfScene(const std::string& relativePath)
         outAnim.channels.resize(anim.channels_count);
         outAnim.samplers.resize(anim.samplers_count);
         for (size_t c = 0; c < anim.channels_count; ++c) {
-            outAnim.channels[c].targetNode = static_cast<uint32_t>(
-                anim.channels[c].target_node - data->nodes);
-            outAnim.channels[c].samplerIndex = static_cast<uint32_t>(
-                anim.channels[c].sampler - anim.samplers);
+            outAnim.channels[c].targetNode = static_cast<uint32_t>(anim.channels[c].target_node - data->nodes);
+            outAnim.channels[c].samplerIndex = static_cast<uint32_t>(anim.channels[c].sampler - anim.samplers);
             outAnim.channels[c].pathType = static_cast<int>(anim.channels[c].target_path);
         }
         for (size_t s = 0; s < anim.samplers_count; ++s) {

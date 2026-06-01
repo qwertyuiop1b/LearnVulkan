@@ -42,54 +42,54 @@ constexpr EntityID NULL_ENTITY = UINT32_MAX;
 /** 位置 / 旋转 / 缩放 */
 struct TransformComponent {
     glm::vec3 position{0.0f};
-    glm::vec3 rotation{0.0f};   ///< Euler angles（度）
-    glm::vec3 scale   {1.0f};
-    EntityID  parent  = NULL_ENTITY;
+    glm::vec3 rotation{0.0f}; ///< Euler angles（度）
+    glm::vec3 scale{1.0f};
+    EntityID parent = NULL_ENTITY;
 
-    mutable glm::mat4 world{1.0f};   ///< 由 TransformSystem 填充
-    mutable bool      dirty = true;
+    mutable glm::mat4 world{1.0f}; ///< 由 TransformSystem 填充
+    mutable bool dirty = true;
 
     [[nodiscard]] glm::mat4 localMatrix() const;
 };
 
 /** 渲染网格引用（仅存 ID/指针，不持有 GPU 资源）*/
 struct MeshComponent {
-    VkBuffer   vertexBuffer  = VK_NULL_HANDLE;
-    VkBuffer   indexBuffer   = VK_NULL_HANDLE;
-    uint32_t   indexCount    = 0;
-    uint32_t   vertexCount   = 0;
-    glm::vec3  aabbMin{-0.5f};
-    glm::vec3  aabbMax{ 0.5f};
+    VkBuffer vertexBuffer = VK_NULL_HANDLE;
+    VkBuffer indexBuffer = VK_NULL_HANDLE;
+    uint32_t indexCount = 0;
+    uint32_t vertexCount = 0;
+    glm::vec3 aabbMin{-0.5f};
+    glm::vec3 aabbMax{0.5f};
 };
 
 /** 材质引用 */
 struct MaterialComponent {
-    uint32_t materialId  = 0;     ///< 对应 MaterialLibrary 中的索引
-    bool     castShadow  = true;
-    bool     receiveShadow = true;
-    float    opacity     = 1.0f;
+    uint32_t materialId = 0; ///< 对应 MaterialLibrary 中的索引
+    bool castShadow = true;
+    bool receiveShadow = true;
+    float opacity = 1.0f;
 };
 
 /** 平行光 */
 struct DirectionalLightComponent {
-    glm::vec3 direction{-1,-2,-1};
-    glm::vec3 color    {1, 1, 1};
-    float     intensity = 1.0f;
+    glm::vec3 direction{-1, -2, -1};
+    glm::vec3 color{1, 1, 1};
+    float intensity = 1.0f;
 };
 
 /** 点光源 */
 struct PointLightComponent {
-    glm::vec3 color    {1, 1, 1};
-    float     intensity = 1.0f;
-    float     radius    = 10.0f;
+    glm::vec3 color{1, 1, 1};
+    float intensity = 1.0f;
+    float radius = 10.0f;
 };
 
 /** 相机 */
 struct CameraComponent {
     float fovDegrees = 45.0f;
-    float nearPlane  = 0.1f;
-    float farPlane   = 1000.0f;
-    bool  isMain     = true;
+    float nearPlane = 0.1f;
+    float farPlane = 1000.0f;
+    bool isMain = true;
 
     [[nodiscard]] glm::mat4 projMatrix(float aspect) const;
 };
@@ -107,25 +107,24 @@ struct TagComponent {
  * Dense array = Cache-Friendly 遍历
  * 支持：add / remove / get / contains / forEach
  */
-template<typename T>
-class ComponentStorage {
-public:
-    void add(EntityID id, T component)
-    {
-        if (indexOf_.count(id)) return;   // 已有则忽略
+template <typename T> class ComponentStorage {
+  public:
+    void add(EntityID id, T component) {
+        if (indexOf_.count(id))
+            return; // 已有则忽略
         indexOf_[id] = static_cast<uint32_t>(entities_.size());
         entities_.push_back(id);
         components_.push_back(std::move(component));
     }
 
-    void remove(EntityID id)
-    {
+    void remove(EntityID id) {
         auto it = indexOf_.find(id);
-        if (it == indexOf_.end()) return;
-        uint32_t idx  = it->second;
+        if (it == indexOf_.end())
+            return;
+        uint32_t idx = it->second;
         uint32_t last = static_cast<uint32_t>(entities_.size()) - 1;
         if (idx != last) {
-            std::swap(entities_[idx],   entities_[last]);
+            std::swap(entities_[idx], entities_[last]);
             std::swap(components_[idx], components_[last]);
             indexOf_[entities_[idx]] = idx;
         }
@@ -134,36 +133,40 @@ public:
         indexOf_.erase(it);
     }
 
-    [[nodiscard]] T*       get(EntityID id)
-    {
+    [[nodiscard]] T* get(EntityID id) {
         auto it = indexOf_.find(id);
         return it != indexOf_.end() ? &components_[it->second] : nullptr;
     }
-    [[nodiscard]] const T* get(EntityID id) const
-    {
+    [[nodiscard]] const T* get(EntityID id) const {
         auto it = indexOf_.find(id);
         return it != indexOf_.end() ? &components_[it->second] : nullptr;
     }
-    [[nodiscard]] bool contains(EntityID id) const { return indexOf_.count(id) > 0; }
-    [[nodiscard]] size_t size() const { return components_.size(); }
+    [[nodiscard]] bool contains(EntityID id) const {
+        return indexOf_.count(id) > 0;
+    }
+    [[nodiscard]] size_t size() const {
+        return components_.size();
+    }
 
-    void forEach(std::function<void(EntityID, T&)> fn)
-    {
+    void forEach(std::function<void(EntityID, T&)> fn) {
         for (size_t i = 0; i < entities_.size(); ++i)
             fn(entities_[i], components_[i]);
     }
-    void forEach(std::function<void(EntityID, const T&)> fn) const
-    {
+    void forEach(std::function<void(EntityID, const T&)> fn) const {
         for (size_t i = 0; i < entities_.size(); ++i)
             fn(entities_[i], components_[i]);
     }
 
-    [[nodiscard]] std::vector<T>&       data()       { return components_; }
-    [[nodiscard]] const std::vector<T>& data() const { return components_; }
+    [[nodiscard]] std::vector<T>& data() {
+        return components_;
+    }
+    [[nodiscard]] const std::vector<T>& data() const {
+        return components_;
+    }
 
-private:
-    std::vector<EntityID>               entities_;
-    std::vector<T>                      components_;
+  private:
+    std::vector<EntityID> entities_;
+    std::vector<T> components_;
     std::unordered_map<EntityID, uint32_t> indexOf_;
 };
 
@@ -188,75 +191,76 @@ private:
  * @endcode
  */
 class World {
-public:
-    ~World() { for (auto& fn : destroyers_) fn(); }
+  public:
+    ~World() {
+        for (auto& fn : destroyers_)
+            fn();
+    }
 
     [[nodiscard]] EntityID createEntity(const std::string& tag = "");
     void destroyEntity(EntityID id);
     [[nodiscard]] bool isAlive(EntityID id) const;
     [[nodiscard]] EntityID findByTag(const std::string& tag) const;
 
-    template<typename T>
-    void add(EntityID id, T component)
-    {
+    template <typename T> void add(EntityID id, T component) {
         storage<T>().add(id, std::move(component));
     }
 
-    template<typename T>
-    void remove(EntityID id) { storage<T>().remove(id); }
+    template <typename T> void remove(EntityID id) {
+        storage<T>().remove(id);
+    }
 
-    template<typename T>
-    [[nodiscard]] T* get(EntityID id) { return storage<T>().get(id); }
+    template <typename T> [[nodiscard]] T* get(EntityID id) {
+        return storage<T>().get(id);
+    }
 
-    template<typename T>
-    [[nodiscard]] const T* get(EntityID id) const { return storage<T>().get(id); }
+    template <typename T> [[nodiscard]] const T* get(EntityID id) const {
+        return storage<T>().get(id);
+    }
 
-    template<typename T>
-    [[nodiscard]] bool has(EntityID id) const { return storage<T>().contains(id); }
+    template <typename T> [[nodiscard]] bool has(EntityID id) const {
+        return storage<T>().contains(id);
+    }
 
-    template<typename T>
-    void forEach(std::function<void(EntityID, T&)> fn)
-    {
+    template <typename T> void forEach(std::function<void(EntityID, T&)> fn) {
         storage<T>().forEach(fn);
     }
 
     /// 遍历同时拥有两种 Component 的实体
-    template<typename A, typename B>
-    void view(std::function<void(EntityID, A&, B&)> fn)
-    {
+    template <typename A, typename B> void view(std::function<void(EntityID, A&, B&)> fn) {
         storage<A>().forEach([&](EntityID id, A& a) {
             B* b = storage<B>().get(id);
-            if (b) fn(id, a, *b);
+            if (b)
+                fn(id, a, *b);
         });
     }
 
     /// 遍历同时拥有三种 Component 的实体
-    template<typename A, typename B, typename C>
-    void view(std::function<void(EntityID, A&, B&, C&)> fn)
-    {
+    template <typename A, typename B, typename C> void view(std::function<void(EntityID, A&, B&, C&)> fn) {
         storage<A>().forEach([&](EntityID id, A& a) {
             B* b = storage<B>().get(id);
             C* c = storage<C>().get(id);
-            if (b && c) fn(id, a, *b, *c);
+            if (b && c)
+                fn(id, a, *b, *c);
         });
     }
 
-    [[nodiscard]] size_t entityCount() const { return aliveCount_; }
+    [[nodiscard]] size_t entityCount() const {
+        return aliveCount_;
+    }
 
-    template<typename T>
-    [[nodiscard]] ComponentStorage<T>& storage();
+    template <typename T> [[nodiscard]] ComponentStorage<T>& storage();
 
-private:
-    EntityID  nextId_    = 0;
-    size_t    aliveCount_= 0;
+  private:
+    EntityID nextId_ = 0;
+    size_t aliveCount_ = 0;
     std::vector<EntityID> alive_;
 
     // 存储 ComponentStorage 的 void* 映射（类型擦除）
     std::unordered_map<size_t, void*> stores_;
     std::vector<std::function<void()>> destroyers_;
 
-    template<typename T>
-    [[nodiscard]] const ComponentStorage<T>& storage() const;
+    template <typename T> [[nodiscard]] const ComponentStorage<T>& storage() const;
 };
 
 // ─── 内置 Systems ─────────────────────────────────────────────────────────
@@ -268,15 +272,19 @@ void transformSystem(World& world);
 
 struct AABB {
     glm::vec3 min{-0.5f};
-    glm::vec3 max{ 0.5f};
+    glm::vec3 max{0.5f};
 
     [[nodiscard]] AABB transform(const glm::mat4& m) const;
-    [[nodiscard]] glm::vec3 center()  const { return (min + max) * 0.5f; }
-    [[nodiscard]] glm::vec3 extents() const { return (max - min) * 0.5f; }
+    [[nodiscard]] glm::vec3 center() const {
+        return (min + max) * 0.5f;
+    }
+    [[nodiscard]] glm::vec3 extents() const {
+        return (max - min) * 0.5f;
+    }
 };
 
 struct Frustum {
-    glm::vec4 planes[6];   ///< Ax + By + Cz + D = 0，法线朝内
+    glm::vec4 planes[6]; ///< Ax + By + Cz + D = 0，法线朝内
 
     static Frustum fromViewProj(const glm::mat4& viewProj);
     [[nodiscard]] bool intersects(const AABB& box) const;
@@ -289,44 +297,40 @@ struct Frustum {
  * 测试其 AABB 是否与视锥相交，输出可见 EntityID 列表。
  */
 class FrustumCuller {
-public:
-    void cull(World& world, const Frustum& frustum,
-              std::vector<EntityID>& outVisible);
+  public:
+    void cull(World& world, const Frustum& frustum, std::vector<EntityID>& outVisible);
 
-    [[nodiscard]] uint32_t lastTotalCount()   const { return lastTotal_; }
-    [[nodiscard]] uint32_t lastVisibleCount() const { return lastVisible_; }
-    [[nodiscard]] float    lastCullRatio()    const
-    {
-        return lastTotal_ > 0
-            ? float(lastTotal_ - lastVisible_) / float(lastTotal_)
-            : 0.0f;
+    [[nodiscard]] uint32_t lastTotalCount() const {
+        return lastTotal_;
+    }
+    [[nodiscard]] uint32_t lastVisibleCount() const {
+        return lastVisible_;
+    }
+    [[nodiscard]] float lastCullRatio() const {
+        return lastTotal_ > 0 ? float(lastTotal_ - lastVisible_) / float(lastTotal_) : 0.0f;
     }
 
-private:
-    uint32_t lastTotal_   = 0;
+  private:
+    uint32_t lastTotal_ = 0;
     uint32_t lastVisible_ = 0;
 };
 
 // ─── World::storage<T> 特化辅助 ──────────────────────────────────────────
 // (实现在 .hpp 内，模板不能分离定义)
 
-template<typename T>
-ComponentStorage<T>& World::storage()
-{
+template <typename T> ComponentStorage<T>& World::storage() {
     size_t key = typeid(T).hash_code();
     auto it = stores_.find(key);
     if (it == stores_.end()) {
         auto* s = new ComponentStorage<T>();
         stores_[key] = s;
-        destroyers_.push_back([s]{ delete s; });
+        destroyers_.push_back([s] { delete s; });
         return *s;
     }
     return *reinterpret_cast<ComponentStorage<T>*>(it->second);
 }
 
-template<typename T>
-const ComponentStorage<T>& World::storage() const
-{
+template <typename T> const ComponentStorage<T>& World::storage() const {
     size_t key = typeid(T).hash_code();
     auto it = stores_.find(key);
     if (it == stores_.end())

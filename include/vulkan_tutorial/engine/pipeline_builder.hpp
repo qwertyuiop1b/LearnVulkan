@@ -28,7 +28,7 @@ namespace engine {
 
 /// 顶点输入描述（聚合绑定+属性，避免悬垂指针）
 struct VertexInputState {
-    std::vector<VkVertexInputBindingDescription>   bindings;
+    std::vector<VkVertexInputBindingDescription> bindings;
     std::vector<VkVertexInputAttributeDescription> attributes;
 };
 
@@ -50,8 +50,10 @@ struct VertexInputState {
  * @endcode
  */
 class GraphicsPipelineBuilder {
-public:
-    explicit GraphicsPipelineBuilder(RHIDevice& dev) : dev_(&dev) { setDefaults(); }
+  public:
+    explicit GraphicsPipelineBuilder(RHIDevice& dev) : dev_(&dev) {
+        setDefaults();
+    }
 
     // ── 着色器 ──────────────────────────────────────────────────────────
     GraphicsPipelineBuilder& setProgram(const ShaderProgram& prog);
@@ -60,37 +62,32 @@ public:
     // ── 顶点输入 ────────────────────────────────────────────────────────
     GraphicsPipelineBuilder& setVertexInput(const VertexInputState& vis);
 
-    template<typename T>
-    GraphicsPipelineBuilder& setVertexInput()
-    {
+    template <typename T> GraphicsPipelineBuilder& setVertexInput() {
         return setVertexInput(T::vertexInputState());
     }
 
-    GraphicsPipelineBuilder& setNoVertexInput();  ///< 全屏三角形等无需顶点
+    GraphicsPipelineBuilder& setNoVertexInput(); ///< 全屏三角形等无需顶点
 
     // ── 拓扑 & 光栅化 ───────────────────────────────────────────────────
     GraphicsPipelineBuilder& setTopology(VkPrimitiveTopology t);
-    GraphicsPipelineBuilder& setCullMode(VkCullModeFlags cull,
-                                         VkFrontFace front = VK_FRONT_FACE_COUNTER_CLOCKWISE);
+    GraphicsPipelineBuilder& setCullMode(VkCullModeFlags cull, VkFrontFace front = VK_FRONT_FACE_COUNTER_CLOCKWISE);
     GraphicsPipelineBuilder& setPolygonMode(VkPolygonMode mode);
     GraphicsPipelineBuilder& setLineWidth(float w);
     GraphicsPipelineBuilder& setDepthBias(float constant, float slope);
 
     // ── 深度 & 模板 ─────────────────────────────────────────────────────
-    GraphicsPipelineBuilder& setDepthTest(bool test, bool write = true,
-                                          VkCompareOp op = VK_COMPARE_OP_LESS);
+    GraphicsPipelineBuilder& setDepthTest(bool test, bool write = true, VkCompareOp op = VK_COMPARE_OP_LESS);
     GraphicsPipelineBuilder& setDepthBounds(float min, float max);
-    GraphicsPipelineBuilder& setStencilTest(VkStencilOpState front,
-                                            VkStencilOpState back);
+    GraphicsPipelineBuilder& setStencilTest(VkStencilOpState front, VkStencilOpState back);
 
     // ── 混合 ────────────────────────────────────────────────────────────
     GraphicsPipelineBuilder& setAlphaBlend(bool enable,
-        VkBlendFactor srcColor = VK_BLEND_FACTOR_SRC_ALPHA,
-        VkBlendFactor dstColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-        VkBlendFactor srcAlpha = VK_BLEND_FACTOR_ONE,
-        VkBlendFactor dstAlpha = VK_BLEND_FACTOR_ZERO);
+                                           VkBlendFactor srcColor = VK_BLEND_FACTOR_SRC_ALPHA,
+                                           VkBlendFactor dstColor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                                           VkBlendFactor srcAlpha = VK_BLEND_FACTOR_ONE,
+                                           VkBlendFactor dstAlpha = VK_BLEND_FACTOR_ZERO);
     GraphicsPipelineBuilder& setColorWriteMask(VkColorComponentFlags mask);
-    GraphicsPipelineBuilder& addColorAttachment(VkFormat fmt);   ///< Dynamic Rendering
+    GraphicsPipelineBuilder& addColorAttachment(VkFormat fmt); ///< Dynamic Rendering
 
     // ── 多重采样 ─────────────────────────────────────────────────────────
     GraphicsPipelineBuilder& setMSAA(VkSampleCountFlagBits samples);
@@ -104,42 +101,42 @@ public:
     // ── 构建 ─────────────────────────────────────────────────────────────
     [[nodiscard]] VkPipeline build(VkPipelineCache cache = VK_NULL_HANDLE);
 
-private:
+  private:
     void setDefaults();
 
-    RHIDevice*  dev_  = nullptr;
+    RHIDevice* dev_ = nullptr;
 
     std::vector<VkPipelineShaderStageCreateInfo> shaderStages_;
-    VkPipelineLayout                             layout_  = VK_NULL_HANDLE;
-    VkRenderPass                                 renderPass_ = VK_NULL_HANDLE;
-    uint32_t                                     subpass_ = 0;
+    VkPipelineLayout layout_ = VK_NULL_HANDLE;
+    VkRenderPass renderPass_ = VK_NULL_HANDLE;
+    uint32_t subpass_ = 0;
 
     VertexInputState vertexInput_;
-    VkPipelineVertexInputStateCreateInfo   viState_{};
+    VkPipelineVertexInputStateCreateInfo viState_{};
     VkPipelineInputAssemblyStateCreateInfo iaState_{};
     VkPipelineRasterizationStateCreateInfo rsState_{};
-    VkPipelineDepthStencilStateCreateInfo  dsState_{};
-    VkPipelineMultisampleStateCreateInfo   msState_{};
+    VkPipelineDepthStencilStateCreateInfo dsState_{};
+    VkPipelineMultisampleStateCreateInfo msState_{};
 
     std::vector<VkPipelineColorBlendAttachmentState> blendAttachments_;
-    std::vector<VkDynamicState>                      dynamicStates_;
-    std::vector<VkFormat>                            colorAttachmentFmts_; // Dynamic Rendering
-    VkFormat                                         depthAttachmentFmt_ = VK_FORMAT_UNDEFINED;
+    std::vector<VkDynamicState> dynamicStates_;
+    std::vector<VkFormat> colorAttachmentFmts_; // Dynamic Rendering
+    VkFormat depthAttachmentFmt_ = VK_FORMAT_UNDEFINED;
 };
 
 // ─── 计算管线构建器 ────────────────────────────────────────────────────────
 
 class ComputePipelineBuilder {
-public:
+  public:
     explicit ComputePipelineBuilder(RHIDevice& dev) : dev_(&dev) {}
 
     ComputePipelineBuilder& setProgram(const ShaderProgram& prog);
     [[nodiscard]] VkPipeline build(VkPipelineCache cache = VK_NULL_HANDLE);
 
-private:
-    RHIDevice*   dev_    = nullptr;
+  private:
+    RHIDevice* dev_ = nullptr;
     VkPipelineShaderStageCreateInfo stage_{};
-    VkPipelineLayout                layout_ = VK_NULL_HANDLE;
+    VkPipelineLayout layout_ = VK_NULL_HANDLE;
 };
 
 // ─── 管线缓存 ──────────────────────────────────────────────────────────────
@@ -161,24 +158,30 @@ private:
  * @endcode
  */
 class PipelineCache {
-public:
+  public:
     void init(RHIDevice& dev, const std::string& cacheFile = "");
     void destroy();
-    void save();   ///< 序列化到磁盘
+    void save(); ///< 序列化到磁盘
 
-    [[nodiscard]] VkPipelineCache vkCache() const { return vkCache_; }
+    [[nodiscard]] VkPipelineCache vkCache() const {
+        return vkCache_;
+    }
 
     /// 运行时管线对象缓存（按名字或哈希）
     [[nodiscard]] VkPipeline find(size_t stateHash) const;
     void store(size_t stateHash, VkPipeline pipeline);
 
-    [[nodiscard]] size_t  cachedPipelineCount() const { return runtimeCache_.size(); }
-    [[nodiscard]] bool    hasFile() const { return !cacheFile_.empty(); }
+    [[nodiscard]] size_t cachedPipelineCount() const {
+        return runtimeCache_.size();
+    }
+    [[nodiscard]] bool hasFile() const {
+        return !cacheFile_.empty();
+    }
 
-private:
-    RHIDevice*   dev_      = nullptr;
-    VkPipelineCache        vkCache_   = VK_NULL_HANDLE;
-    std::string            cacheFile_;
+  private:
+    RHIDevice* dev_ = nullptr;
+    VkPipelineCache vkCache_ = VK_NULL_HANDLE;
+    std::string cacheFile_;
     std::unordered_map<size_t, VkPipeline> runtimeCache_;
 };
 

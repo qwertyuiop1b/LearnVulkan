@@ -14,8 +14,7 @@ namespace {
 
 InteractiveChapterTools* gTools = nullptr;
 
-void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
-{
+void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (gTools && gTools->hasUi())
         ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
     if (gTools && (!gTools->hasUi() || !ImGui::GetIO().WantCaptureMouse)) {
@@ -26,40 +25,35 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
     }
 }
 
-void cursorPosCallback(GLFWwindow* window, double x, double y)
-{
+void cursorPosCallback(GLFWwindow* window, double x, double y) {
     if (gTools && gTools->hasUi())
         ImGui_ImplGlfw_CursorPosCallback(window, x, y);
     if (gTools && (!gTools->hasUi() || !ImGui::GetIO().WantCaptureMouse))
         gTools->camera().onCursorMove(x, y);
 }
 
-void scrollCallback(GLFWwindow* window, double xOffset, double yOffset)
-{
+void scrollCallback(GLFWwindow* window, double xOffset, double yOffset) {
     if (gTools && gTools->hasUi())
         ImGui_ImplGlfw_ScrollCallback(window, xOffset, yOffset);
     if (gTools && (!gTools->hasUi() || !ImGui::GetIO().WantCaptureMouse))
         gTools->camera().onScroll(yOffset);
 }
 
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
+void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     if (gTools && gTools->hasUi())
         ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
     if (gTools && (!gTools->hasUi() || !ImGui::GetIO().WantCaptureKeyboard))
         gTools->camera().onKey(key, action);
 }
 
-void charCallback(GLFWwindow* window, unsigned int c)
-{
+void charCallback(GLFWwindow* window, unsigned int c) {
     if (gTools && gTools->hasUi())
         ImGui_ImplGlfw_CharCallback(window, c);
 }
 
 } // namespace
 
-void InteractiveChapterTools::attachInput(GLFWwindow* window)
-{
+void InteractiveChapterTools::attachInput(GLFWwindow* window) {
     info_.window = window;
     gTools = this;
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
@@ -72,8 +66,7 @@ void InteractiveChapterTools::attachInput(GLFWwindow* window)
         windowTitleBase_ = title;
 }
 
-bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info)
-{
+bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info) {
     info_ = info;
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -83,18 +76,16 @@ bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info)
 
     // ── 加载中文字体（支持汉字显示）──────────────────────────────────────────
     // 按优先级尝试多个字体路径（macOS / Linux）
-    static const char* kCjkFontCandidates[] = {
-        // macOS
-        "/System/Library/Fonts/STHeiti Light.ttc",
-        "/System/Library/Fonts/STHeiti Medium.ttc",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-        "/System/Library/Fonts/PingFang.ttc",
-        // Linux (Noto CJK)
-        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-        "/usr/share/fonts/noto-cjk/NotoSansCJKsc-Regular.otf",
-        "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
-        nullptr
-    };
+    static const char* kCjkFontCandidates[] = {// macOS
+                                               "/System/Library/Fonts/STHeiti Light.ttc",
+                                               "/System/Library/Fonts/STHeiti Medium.ttc",
+                                               "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+                                               "/System/Library/Fonts/PingFang.ttc",
+                                               // Linux (Noto CJK)
+                                               "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+                                               "/usr/share/fonts/noto-cjk/NotoSansCJKsc-Regular.otf",
+                                               "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+                                               nullptr};
 
     bool cjkLoaded = false;
     for (int k = 0; kCjkFontCandidates[k] != nullptr; ++k) {
@@ -105,18 +96,14 @@ bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info)
         latinCfg.SizePixels = 16.0f;
         latinCfg.OversampleH = 2;
         latinCfg.OversampleV = 2;
-        io.Fonts->AddFontFromFileTTF(
-            kCjkFontCandidates[k], 16.0f, &latinCfg,
-            io.Fonts->GetGlyphRangesDefault());
+        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], 16.0f, &latinCfg, io.Fonts->GetGlyphRangesDefault());
         // 第 1 步：Merge 中文字形到同一字体（合并模式）
         ImFontConfig cjkCfg;
-        cjkCfg.MergeMode    = true;
-        cjkCfg.OversampleH  = 1;   // CJK 不需要高倍过采样
-        cjkCfg.OversampleV  = 1;
-        cjkCfg.GlyphOffset  = {0.0f, 1.0f};  // 微调垂直对齐
-        io.Fonts->AddFontFromFileTTF(
-            kCjkFontCandidates[k], 16.0f, &cjkCfg,
-            io.Fonts->GetGlyphRangesChineseFull());
+        cjkCfg.MergeMode = true;
+        cjkCfg.OversampleH = 1; // CJK 不需要高倍过采样
+        cjkCfg.OversampleV = 1;
+        cjkCfg.GlyphOffset = {0.0f, 1.0f}; // 微调垂直对齐
+        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], 16.0f, &cjkCfg, io.Fonts->GetGlyphRangesChineseFull());
         io.Fonts->Build();
         cjkLoaded = true;
         break;
@@ -160,8 +147,7 @@ bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info)
     return true;
 }
 
-void InteractiveChapterTools::shutdown(VkDevice device)
-{
+void InteractiveChapterTools::shutdown(VkDevice device) {
     if (!initialized_)
         return;
     vkDeviceWaitIdle(device);
@@ -179,9 +165,7 @@ void InteractiveChapterTools::shutdown(VkDevice device)
         gTools = nullptr;
 }
 
-void InteractiveChapterTools::onSwapchainRecreated(
-    VkRenderPass renderPass, VkFormat format, uint32_t imageCount)
-{
+void InteractiveChapterTools::onSwapchainRecreated(VkRenderPass renderPass, VkFormat format, uint32_t imageCount) {
     if (!initialized_)
         return;
     info_.renderPass = renderPass;
@@ -190,8 +174,7 @@ void InteractiveChapterTools::onSwapchainRecreated(
     ImGui_ImplVulkan_SetMinImageCount(imageCount);
 }
 
-void InteractiveChapterTools::beginFrame(float deltaSeconds)
-{
+void InteractiveChapterTools::beginFrame(float deltaSeconds) {
     lastDeltaSeconds_ = deltaSeconds;
     frameTimer_.beginFrame();
     if (info_.window)
@@ -203,14 +186,13 @@ void InteractiveChapterTools::beginFrame(float deltaSeconds)
     }
 }
 
-void InteractiveChapterTools::buildDebugPanel(const char* chapterTitle)
-{
+void InteractiveChapterTools::buildDebugPanel(const char* chapterTitle) {
     if (!imguiReady_)
         return;
     ImGui::SetNextWindowPos(ImVec2(12.0f, 12.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(330.0f, 0.0f), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("调试面板", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextColored(ImVec4(1,0.85f,0.3f,1), "%s", chapterTitle);
+        ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1), "%s", chapterTitle);
         ImGui::Separator();
         ImGui::Text("CPU FPS: %.1f  |  帧时间: %.2f ms", stats_.cpuFps, stats_.cpuFrameMs);
         if (stats_.gpuTimingAvailable)
@@ -235,23 +217,20 @@ void InteractiveChapterTools::buildDebugPanel(const char* chapterTitle)
     ImGui::End();
 }
 
-void InteractiveChapterTools::beginGpuSection(VkCommandBuffer cmd, uint32_t frameIndex)
-{
+void InteractiveChapterTools::beginGpuSection(VkCommandBuffer cmd, uint32_t frameIndex) {
     if (!gpuProfiler_.isAvailable())
         return;
     gpuProfiler_.reset(cmd, frameIndex);
     gpuProfiler_.writeStart(cmd, frameIndex);
 }
 
-void InteractiveChapterTools::endGpuSection(VkCommandBuffer cmd, uint32_t frameIndex)
-{
+void InteractiveChapterTools::endGpuSection(VkCommandBuffer cmd, uint32_t frameIndex) {
     if (!gpuProfiler_.isAvailable())
         return;
     gpuProfiler_.writeEnd(cmd, frameIndex);
 }
 
-void InteractiveChapterTools::renderUi(VkCommandBuffer cmd)
-{
+void InteractiveChapterTools::renderUi(VkCommandBuffer cmd) {
     if (!imguiReady_)
         return;
     buildDebugPanel(windowTitleBase_.empty() ? "Chapter" : windowTitleBase_.c_str());
@@ -259,8 +238,7 @@ void InteractiveChapterTools::renderUi(VkCommandBuffer cmd)
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
 }
 
-void InteractiveChapterTools::endFrame(uint32_t frameIndex)
-{
+void InteractiveChapterTools::endFrame(uint32_t frameIndex) {
     frameTimer_.endFrame();
     stats_.cpuFrameMs = frameTimer_.cpuFrameMs();
     stats_.cpuFps = frameTimer_.cpuFps();
@@ -269,8 +247,7 @@ void InteractiveChapterTools::endFrame(uint32_t frameIndex)
     updateWindowTitle();
 }
 
-void InteractiveChapterTools::updateWindowTitle() const
-{
+void InteractiveChapterTools::updateWindowTitle() const {
     if (!info_.window || windowTitleBase_.empty())
         return;
     static thread_local std::string title;
@@ -278,13 +255,11 @@ void InteractiveChapterTools::updateWindowTitle() const
     glfwSetWindowTitle(info_.window, title.c_str());
 }
 
-bool InteractiveChapterTools::wantsCaptureMouse() const
-{
+bool InteractiveChapterTools::wantsCaptureMouse() const {
     return imguiReady_ && ImGui::GetIO().WantCaptureMouse;
 }
 
-bool InteractiveChapterTools::wantsCaptureKeyboard() const
-{
+bool InteractiveChapterTools::wantsCaptureKeyboard() const {
     return imguiReady_ && ImGui::GetIO().WantCaptureKeyboard;
 }
 

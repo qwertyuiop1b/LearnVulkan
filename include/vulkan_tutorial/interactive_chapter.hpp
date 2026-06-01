@@ -16,20 +16,20 @@
 namespace vulkan_tutorial {
 
 struct InteractiveInitInfo {
-    GLFWwindow*      window = nullptr;
-    VkInstance       instance = VK_NULL_HANDLE;
+    GLFWwindow* window = nullptr;
+    VkInstance instance = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkDevice         device = VK_NULL_HANDLE;
-    VkQueue          graphicsQueue = VK_NULL_HANDLE;
-    uint32_t         queueFamily = 0;
-    VkRenderPass     renderPass = VK_NULL_HANDLE;
-    VkFormat         swapchainFormat = VK_FORMAT_UNDEFINED;
-    uint32_t         imageCount = 2;
-    uint32_t         maxFramesInFlight = 2;
+    VkDevice device = VK_NULL_HANDLE;
+    VkQueue graphicsQueue = VK_NULL_HANDLE;
+    uint32_t queueFamily = 0;
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    VkFormat swapchainFormat = VK_FORMAT_UNDEFINED;
+    uint32_t imageCount = 2;
+    uint32_t maxFramesInFlight = 2;
 };
 
 class InteractiveChapterTools {
-public:
+  public:
     void attachInput(GLFWwindow* window);
     bool initVulkan(const InteractiveInitInfo& info);
     void shutdown(VkDevice device);
@@ -41,24 +41,32 @@ public:
     void renderUi(VkCommandBuffer cmd);
     void endFrame(uint32_t frameIndex);
     void updateWindowTitle() const;
-    OrbitCamera& camera() { return camera_; }
-    const OrbitCamera& camera() const { return camera_; }
-    const FrameStats& stats() const { return stats_; }
+    OrbitCamera& camera() {
+        return camera_;
+    }
+    const OrbitCamera& camera() const {
+        return camera_;
+    }
+    const FrameStats& stats() const {
+        return stats_;
+    }
     bool wantsCaptureMouse() const;
     bool wantsCaptureKeyboard() const;
-    bool hasUi() const { return imguiReady_; }
+    bool hasUi() const {
+        return imguiReady_;
+    }
 
-private:
-    InteractiveInitInfo  info_{};
-    OrbitCamera          camera_{};
-    FrameTimer           frameTimer_{};
+  private:
+    InteractiveInitInfo info_{};
+    OrbitCamera camera_{};
+    FrameTimer frameTimer_{};
     GpuTimestampProfiler gpuProfiler_{};
-    FrameStats           stats_{};
-    bool                 initialized_ = false;
-    bool                 imguiReady_ = false;
-    VkDescriptorPool     imguiPool_ = VK_NULL_HANDLE;
-    std::string          windowTitleBase_;
-    float                lastDeltaSeconds_ = 0.016f;
+    FrameStats stats_{};
+    bool initialized_ = false;
+    bool imguiReady_ = false;
+    VkDescriptorPool imguiPool_ = VK_NULL_HANDLE;
+    std::string windowTitleBase_;
+    float lastDeltaSeconds_ = 0.016f;
 };
 
 } // namespace vulkan_tutorial

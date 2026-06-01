@@ -21,12 +21,12 @@ namespace engine {
 // ─── 采样器描述符 ───────────────────────────────────────────────────────────
 
 struct SamplerDesc {
-    VkFilter             magFilter   = VK_FILTER_LINEAR;
-    VkFilter             minFilter   = VK_FILTER_LINEAR;
+    VkFilter magFilter = VK_FILTER_LINEAR;
+    VkFilter minFilter = VK_FILTER_LINEAR;
     VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    bool                 enableAniso = true;
-    bool                 enableMip   = true;
-    float                maxLod      = 16.0f;
+    bool enableAniso = true;
+    bool enableMip = true;
+    float maxLod = 16.0f;
 };
 
 // ─── 基础纹理 ───────────────────────────────────────────────────────────────
@@ -37,9 +37,11 @@ struct SamplerDesc {
  * 持有：VkImage + VkDeviceMemory + VkImageView + VkSampler
  */
 class Texture {
-public:
+  public:
     Texture() = default;
-    virtual ~Texture() { destroy(); }
+    virtual ~Texture() {
+        destroy();
+    }
     Texture(const Texture&) = delete;
     Texture& operator=(const Texture&) = delete;
     Texture(Texture&&) noexcept;
@@ -47,42 +49,60 @@ public:
 
     void destroy();
 
-    [[nodiscard]] VkImage     image()   const { return image_; }
-    [[nodiscard]] VkImageView view()    const { return view_; }
-    [[nodiscard]] VkSampler   sampler() const { return sampler_; }
-    [[nodiscard]] VkFormat    format()  const { return format_; }
-    [[nodiscard]] uint32_t    width()   const { return width_; }
-    [[nodiscard]] uint32_t    height()  const { return height_; }
-    [[nodiscard]] uint32_t    mipLevels() const { return mipLevels_; }
-    [[nodiscard]] bool        isValid()   const { return image_ != VK_NULL_HANDLE; }
+    [[nodiscard]] VkImage image() const {
+        return image_;
+    }
+    [[nodiscard]] VkImageView view() const {
+        return view_;
+    }
+    [[nodiscard]] VkSampler sampler() const {
+        return sampler_;
+    }
+    [[nodiscard]] VkFormat format() const {
+        return format_;
+    }
+    [[nodiscard]] uint32_t width() const {
+        return width_;
+    }
+    [[nodiscard]] uint32_t height() const {
+        return height_;
+    }
+    [[nodiscard]] uint32_t mipLevels() const {
+        return mipLevels_;
+    }
+    [[nodiscard]] bool isValid() const {
+        return image_ != VK_NULL_HANDLE;
+    }
 
-    [[nodiscard]] VkDescriptorImageInfo descriptorInfo() const
-    {
+    [[nodiscard]] VkDescriptorImageInfo descriptorInfo() const {
         return {sampler_, view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     }
 
-protected:
-    void allocImage(RHIDevice& dev, uint32_t w, uint32_t h,
-                    uint32_t mips, uint32_t layers,
-                    VkFormat fmt, VkImageUsageFlags usage,
+  protected:
+    void allocImage(RHIDevice& dev,
+                    uint32_t w,
+                    uint32_t h,
+                    uint32_t mips,
+                    uint32_t layers,
+                    VkFormat fmt,
+                    VkImageUsageFlags usage,
                     VkImageCreateFlags flags = 0,
                     VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
     void createSampler(RHIDevice& dev, const SamplerDesc& sd);
-    void transitionLayout(VkCommandBuffer cmd,
-                          VkImageLayout oldL, VkImageLayout newL,
-                          uint32_t mips = 1, uint32_t layers = 1);
+    void transitionLayout(
+        VkCommandBuffer cmd, VkImageLayout oldL, VkImageLayout newL, uint32_t mips = 1, uint32_t layers = 1);
 
-    RHIDevice*     dev_       = nullptr;
-    VkImage        image_     = VK_NULL_HANDLE;
-    VkDeviceMemory memory_    = VK_NULL_HANDLE;
-    VkImageView    view_      = VK_NULL_HANDLE;
-    VkSampler      sampler_   = VK_NULL_HANDLE;
-    VkFormat       format_    = VK_FORMAT_UNDEFINED;
-    uint32_t       width_     = 0;
-    uint32_t       height_    = 0;
-    uint32_t       mipLevels_ = 1;
-    uint32_t       layers_    = 1;
-    VkImageLayout  layout_    = VK_IMAGE_LAYOUT_UNDEFINED;
+    RHIDevice* dev_ = nullptr;
+    VkImage image_ = VK_NULL_HANDLE;
+    VkDeviceMemory memory_ = VK_NULL_HANDLE;
+    VkImageView view_ = VK_NULL_HANDLE;
+    VkSampler sampler_ = VK_NULL_HANDLE;
+    VkFormat format_ = VK_FORMAT_UNDEFINED;
+    uint32_t width_ = 0;
+    uint32_t height_ = 0;
+    uint32_t mipLevels_ = 1;
+    uint32_t layers_ = 1;
+    VkImageLayout layout_ = VK_IMAGE_LAYOUT_UNDEFINED;
 };
 
 // ─── Texture2D ──────────────────────────────────────────────────────────────
@@ -97,25 +117,24 @@ protected:
  *   - sRGB / Linear 自动选择
  */
 class Texture2D : public Texture {
-public:
+  public:
     struct CreateInfo {
-        uint32_t    width      = 0;
-        uint32_t    height     = 0;
-        VkFormat    format     = VK_FORMAT_R8G8B8A8_SRGB;
-        const void* pixels     = nullptr;
-        bool        genMips    = true;
+        uint32_t width = 0;
+        uint32_t height = 0;
+        VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+        const void* pixels = nullptr;
+        bool genMips = true;
         SamplerDesc sampler{};
     };
 
     /// 从文件加载（stb_image 读取 → 上传）
-    void loadFromFile(RHIDevice& dev, const std::string& path,
-                      bool srgb = true, bool genMips = true,
-                      const SamplerDesc& sd = {});
+    void loadFromFile(
+        RHIDevice& dev, const std::string& path, bool srgb = true, bool genMips = true, const SamplerDesc& sd = {});
 
     /// 从内存创建
     void create(RHIDevice& dev, const CreateInfo& ci);
 
-private:
+  private:
     void generateMips(VkCommandBuffer cmd);
 };
 
@@ -128,23 +147,24 @@ private:
  * 每面尺寸必须相同，格式相同。
  */
 class TextureCube : public Texture {
-public:
+  public:
     struct CreateInfo {
-        uint32_t    size   = 256;    ///< 每面的宽/高（必须相等）
-        VkFormat    format = VK_FORMAT_R8G8B8A8_SRGB;
-        VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                | VK_IMAGE_USAGE_SAMPLED_BIT;
+        uint32_t size = 256; ///< 每面的宽/高（必须相等）
+        VkFormat format = VK_FORMAT_R8G8B8A8_SRGB;
+        VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         SamplerDesc sampler{};
     };
 
     void create(RHIDevice& dev, const CreateInfo& ci);
 
     /// 获取某一面的 ImageView（用于渲染捕获）
-    [[nodiscard]] VkImageView faceView(uint32_t face) const { return faceViews_[face]; }
+    [[nodiscard]] VkImageView faceView(uint32_t face) const {
+        return faceViews_[face];
+    }
 
     void destroyFaceViews();
 
-private:
+  private:
     VkImageView faceViews_[6] = {};
 };
 
@@ -157,32 +177,33 @@ private:
  *            和作为后续 Pass 的 Sampled Texture
  */
 class RenderTarget : public Texture {
-public:
+  public:
     enum class Type { Color, Depth, DepthStencil };
 
     struct CreateInfo {
-        uint32_t    width  = 0;
-        uint32_t    height = 0;
-        Type        type   = Type::Color;
-        VkFormat    format = VK_FORMAT_UNDEFINED;   ///< UNDEFINED = 自动选择
+        uint32_t width = 0;
+        uint32_t height = 0;
+        Type type = Type::Color;
+        VkFormat format = VK_FORMAT_UNDEFINED; ///< UNDEFINED = 自动选择
         SamplerDesc sampler{};
-        bool        needSampling = true;  ///< 是否需要在着色器中采样
+        bool needSampling = true; ///< 是否需要在着色器中采样
     };
 
     void create(RHIDevice& dev, const CreateInfo& ci);
 
-    [[nodiscard]] bool isColor() const { return type_ == Type::Color; }
-    [[nodiscard]] bool isDepth() const { return type_ == Type::Depth
-                                              || type_ == Type::DepthStencil; }
-    [[nodiscard]] VkDescriptorImageInfo descriptorInfo() const
-    {
-        VkImageLayout l = isDepth()
-            ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-            : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    [[nodiscard]] bool isColor() const {
+        return type_ == Type::Color;
+    }
+    [[nodiscard]] bool isDepth() const {
+        return type_ == Type::Depth || type_ == Type::DepthStencil;
+    }
+    [[nodiscard]] VkDescriptorImageInfo descriptorInfo() const {
+        VkImageLayout l =
+            isDepth() ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         return {sampler_, view_, l};
     }
 
-private:
+  private:
     Type type_ = Type::Color;
 };
 
@@ -202,30 +223,34 @@ private:
  * @endcode
  */
 class TextureCache {
-public:
-    void init(RHIDevice& dev) { dev_ = &dev; }
+  public:
+    void init(RHIDevice& dev) {
+        dev_ = &dev;
+    }
     void destroy();
 
-    [[nodiscard]] Texture2D& load(const std::string& path,
-                                  bool srgb = true, bool genMips = true);
-    void       unload(const std::string& path);
-    void       unloadAll();
+    [[nodiscard]] Texture2D& load(const std::string& path, bool srgb = true, bool genMips = true);
+    void unload(const std::string& path);
+    void unloadAll();
 
-    [[nodiscard]] size_t  count()      const { return cache_.size(); }
-    [[nodiscard]] bool    isCached(const std::string& path) const
-    {
+    [[nodiscard]] size_t count() const {
+        return cache_.size();
+    }
+    [[nodiscard]] bool isCached(const std::string& path) const {
         return cache_.find(path) != cache_.end();
     }
 
     struct Stats {
-        size_t totalLoaded  = 0;
-        size_t cacheHits    = 0;
-        size_t cacheMisses  = 0;
+        size_t totalLoaded = 0;
+        size_t cacheHits = 0;
+        size_t cacheMisses = 0;
     };
-    [[nodiscard]] const Stats& stats() const { return stats_; }
+    [[nodiscard]] const Stats& stats() const {
+        return stats_;
+    }
 
-private:
-    RHIDevice*  dev_  = nullptr;
+  private:
+    RHIDevice* dev_ = nullptr;
     std::unordered_map<std::string, std::unique_ptr<Texture2D>> cache_;
     Stats stats_{};
 };

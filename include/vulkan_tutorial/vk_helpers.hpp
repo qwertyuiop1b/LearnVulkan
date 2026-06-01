@@ -15,31 +15,29 @@
 namespace vulkan_tutorial {
 
 struct DepthResources {
-    VkImage        image       = VK_NULL_HANDLE;
-    VkDeviceMemory memory      = VK_NULL_HANDLE;
-    VkImageView    view        = VK_NULL_HANDLE;
-    VkFormat       format      = VK_FORMAT_UNDEFINED;
+    VkImage image = VK_NULL_HANDLE;
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImageView view = VK_NULL_HANDLE;
+    VkFormat format = VK_FORMAT_UNDEFINED;
 };
 
-inline uint32_t findMemoryType(VkPhysicalDevice physicalDevice,
-                               uint32_t typeFilter,
-                               VkMemoryPropertyFlags properties)
-{
+inline uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProperties{};
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; ++i) {
-        if ((typeFilter & (1u << i)) &&
-            (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        if ((typeFilter & (1u << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
             return i;
     }
     throw std::runtime_error("找不到合适内存类型");
 }
 
-inline void createBuffer(VkPhysicalDevice physicalDevice, VkDevice device,
-                         VkDeviceSize size, VkBufferUsageFlags usage,
+inline void createBuffer(VkPhysicalDevice physicalDevice,
+                         VkDevice device,
+                         VkDeviceSize size,
+                         VkBufferUsageFlags usage,
                          VkMemoryPropertyFlags properties,
-                         VkBuffer& buffer, VkDeviceMemory& memory)
-{
+                         VkBuffer& buffer,
+                         VkDeviceMemory& memory) {
     VkBufferCreateInfo bufferInfo{};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = size;
@@ -51,20 +49,24 @@ inline void createBuffer(VkPhysicalDevice physicalDevice, VkDevice device,
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(
-        physicalDevice, memRequirements.memoryTypeBits, properties);
+    allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
     VK_CHECK(vkAllocateMemory(device, &allocInfo, nullptr, &memory));
     VK_CHECK(vkBindBufferMemory(device, buffer, memory, 0));
 }
 
-inline void createImage(VkPhysicalDevice physicalDevice, VkDevice device,
-                        uint32_t width, uint32_t height, VkFormat format,
-                        VkImageTiling tiling, VkImageUsageFlags usage,
+inline void createImage(VkPhysicalDevice physicalDevice,
+                        VkDevice device,
+                        uint32_t width,
+                        uint32_t height,
+                        VkFormat format,
+                        VkImageTiling tiling,
+                        VkImageUsageFlags usage,
                         VkMemoryPropertyFlags properties,
-                        VkImage& image, VkDeviceMemory& memory,
-                        uint32_t mipLevels = 1, uint32_t arrayLayers = 1,
-                        VkImageCreateFlags flags = 0)
-{
+                        VkImage& image,
+                        VkDeviceMemory& memory,
+                        uint32_t mipLevels = 1,
+                        uint32_t arrayLayers = 1,
+                        VkImageCreateFlags flags = 0) {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.flags = flags;
@@ -84,14 +86,12 @@ inline void createImage(VkPhysicalDevice physicalDevice, VkDevice device,
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(
-        physicalDevice, memRequirements.memoryTypeBits, properties);
+    allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, properties);
     VK_CHECK(vkAllocateMemory(device, &allocInfo, nullptr, &memory));
     VK_CHECK(vkBindImageMemory(device, image, memory, 0));
 }
 
-inline VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool pool)
-{
+inline VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool pool) {
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -106,9 +106,7 @@ inline VkCommandBuffer beginSingleTimeCommands(VkDevice device, VkCommandPool po
     return commandBuffer;
 }
 
-inline void endSingleTimeCommands(VkDevice device, VkCommandPool pool,
-                                  VkQueue queue, VkCommandBuffer commandBuffer)
-{
+inline void endSingleTimeCommands(VkDevice device, VkCommandPool pool, VkQueue queue, VkCommandBuffer commandBuffer) {
     vkEndCommandBuffer(commandBuffer);
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -119,9 +117,8 @@ inline void endSingleTimeCommands(VkDevice device, VkCommandPool pool,
     vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 }
 
-inline void copyBuffer(VkDevice device, VkCommandPool pool, VkQueue queue,
-                       VkBuffer src, VkBuffer dst, VkDeviceSize size)
-{
+inline void
+copyBuffer(VkDevice device, VkCommandPool pool, VkQueue queue, VkBuffer src, VkBuffer dst, VkDeviceSize size) {
     VkCommandBuffer cmd = beginSingleTimeCommands(device, pool);
     VkBufferCopy copyRegion{};
     copyRegion.size = size;
@@ -129,14 +126,19 @@ inline void copyBuffer(VkDevice device, VkCommandPool pool, VkQueue queue,
     endSingleTimeCommands(device, pool, queue, cmd);
 }
 
-inline DepthResources createDepthResources(VkPhysicalDevice physicalDevice,
-                                           VkDevice device, VkExtent2D extent)
-{
+inline DepthResources createDepthResources(VkPhysicalDevice physicalDevice, VkDevice device, VkExtent2D extent) {
     DepthResources depth{};
     depth.format = findDepthFormat(physicalDevice);
-    createImage(physicalDevice, device, extent.width, extent.height, depth.format,
-                VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depth.image, depth.memory);
+    createImage(physicalDevice,
+                device,
+                extent.width,
+                extent.height,
+                depth.format,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                depth.image,
+                depth.memory);
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = depth.image;
@@ -153,8 +155,7 @@ inline DepthResources createDepthResources(VkPhysicalDevice physicalDevice,
     return depth;
 }
 
-inline void destroyDepthResources(VkDevice device, DepthResources& depth)
-{
+inline void destroyDepthResources(VkDevice device, DepthResources& depth) {
     if (depth.view != VK_NULL_HANDLE)
         vkDestroyImageView(device, depth.view, nullptr);
     if (depth.image != VK_NULL_HANDLE)
@@ -164,8 +165,7 @@ inline void destroyDepthResources(VkDevice device, DepthResources& depth)
     depth = {};
 }
 
-inline void createInstance(VkInstance& instance)
-{
+inline void createInstance(VkInstance& instance) {
     VkApplicationInfo appInfo{};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     appInfo.apiVersion = VK_API_VERSION_1_3;
@@ -175,7 +175,12 @@ inline void createInstance(VkInstance& instance)
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
+#ifdef __APPLE__
+#ifdef __APPLE__
     createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+
+#endif
     if (ENABLE_VALIDATION_LAYERS) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
         createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -183,16 +188,13 @@ inline void createInstance(VkInstance& instance)
     VK_CHECK(vkCreateInstance(&createInfo, nullptr, &instance));
 }
 
-inline void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
-                               VkPhysicalDevice& physicalDevice)
-{
+inline void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface, VkPhysicalDevice& physicalDevice) {
     uint32_t count = 0;
     vkEnumeratePhysicalDevices(instance, &count, nullptr);
     std::vector<VkPhysicalDevice> devices(count);
     vkEnumeratePhysicalDevices(instance, &count, devices.data());
     for (VkPhysicalDevice device : devices) {
-        if (findQueueFamilies(device, surface).isComplete() &&
-            checkDeviceExtensionSupport(device)) {
+        if (findQueueFamilies(device, surface).isComplete() && checkDeviceExtensionSupport(device)) {
             physicalDevice = device;
             return;
         }
@@ -200,14 +202,15 @@ inline void pickPhysicalDevice(VkInstance instance, VkSurfaceKHR surface,
     throw std::runtime_error("找不到合适的 GPU");
 }
 
-inline void createLogicalDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface,
-                                VkDevice& device, VkQueue& graphicsQueue,
-                                VkQueue& presentQueue, QueueFamilyIndices& indices,
-                                const VkPhysicalDeviceFeatures* extraFeatures = nullptr)
-{
+inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
+                                VkSurfaceKHR surface,
+                                VkDevice& device,
+                                VkQueue& graphicsQueue,
+                                VkQueue& presentQueue,
+                                QueueFamilyIndices& indices,
+                                const VkPhysicalDeviceFeatures* extraFeatures = nullptr) {
     indices = findQueueFamilies(physicalDevice, surface);
-    std::set<uint32_t> uniqueFamilies = {
-        indices.graphicsFamily.value(), indices.presentFamily.value()};
+    std::set<uint32_t> uniqueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
     const float queuePriority = 1.0f;
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     for (uint32_t family : uniqueFamilies) {

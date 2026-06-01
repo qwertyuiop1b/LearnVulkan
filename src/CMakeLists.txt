@@ -97,9 +97,13 @@ target_link_libraries(ch20_raytracing PRIVATE vulkan_tutorial_common)
 compile_shaders(ch20_raytracing)
 
 # ─── Chapter 21: Mesh Shaders ────────────────────────────────────────────────
-add_executable(ch21_mesh_shader chapters/ch21_mesh_shader.cpp)
-target_link_libraries(ch21_mesh_shader PRIVATE vulkan_tutorial_common)
-compile_shaders(ch21_mesh_shader)
+if(SHADER_COMPILER_SUPPORTS_MESH_SHADERS)
+    add_executable(ch21_mesh_shader chapters/ch21_mesh_shader.cpp)
+    target_link_libraries(ch21_mesh_shader PRIVATE vulkan_tutorial_common)
+    compile_shaders(ch21_mesh_shader)
+else()
+    message(STATUS "Skipping ch21_mesh_shader: mesh/task shaders unsupported by shader compiler")
+endif()
 
 # ─── Chapter 22: Bindless Rendering ──────────────────────────────────────────
 add_executable(ch22_bindless chapters/ch22_bindless.cpp)
@@ -147,9 +151,17 @@ target_link_libraries(ch30_vma PRIVATE vulkan_tutorial_common)
 compile_shaders(ch30_vma)
 
 # ─── Chapter 31: Shader Object (VK_EXT_shader_object) ────────────────────────
-add_executable(ch31_shader_object chapters/ch31_shader_object.cpp)
-target_link_libraries(ch31_shader_object PRIVATE vulkan_tutorial_common)
-compile_shaders(ch31_shader_object)
+include(CheckSymbolExists)
+check_symbol_exists(VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT "vulkan/vulkan.h"
+                    VULKAN_HEADERS_HAVE_SHADER_OBJECT)
+
+if(VULKAN_HEADERS_HAVE_SHADER_OBJECT)
+    add_executable(ch31_shader_object chapters/ch31_shader_object.cpp)
+    target_link_libraries(ch31_shader_object PRIVATE vulkan_tutorial_common)
+    compile_shaders(ch31_shader_object)
+else()
+    message(STATUS \"Skipping ch31_shader_object: Vulkan headers lack VK_EXT_shader_object types\")
+endif()
 
 # ─── Chapter 32: Sparse Resources (Virtual Texturing) ────────────────────────
 add_executable(ch32_sparse chapters/ch32_sparse.cpp)
@@ -172,9 +184,16 @@ target_link_libraries(ch35_multiview PRIVATE vulkan_tutorial_common)
 compile_shaders(ch35_multiview)
 
 # ─── Chapter 36: Graphics Pipeline Library (GPL) ─────────────────────────────
-add_executable(ch36_gpl chapters/ch36_gpl.cpp)
-target_link_libraries(ch36_gpl PRIVATE vulkan_tutorial_common)
-compile_shaders(ch36_gpl)
+check_symbol_exists(VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT
+                    "vulkan/vulkan.h"
+                    VULKAN_HEADERS_HAVE_GPL)
+if(VULKAN_HEADERS_HAVE_GPL)
+    add_executable(ch36_gpl chapters/ch36_gpl.cpp)
+    target_link_libraries(ch36_gpl PRIVATE vulkan_tutorial_common)
+    compile_shaders(ch36_gpl)
+else()
+    message(STATUS "Skipping ch36_gpl: Vulkan headers lack VK_EXT_graphics_pipeline_library types")
+endif()
 
 # ─── Chapter 37: Conditional Rendering ───────────────────────────────────────
 add_executable(ch37_conditional_rendering chapters/ch37_conditional_rendering.cpp)

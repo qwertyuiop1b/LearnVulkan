@@ -37,14 +37,15 @@ struct ChunkInfo {
 };
 
 class Ch90App : public DemoApp {
-protected:
+  protected:
     static constexpr int WORLD_CHUNKS = 16;
     static constexpr float CHUNK_SIZE = 256.0f;
 
-    void onInit() override { bgColor_ = {0.04f, 0.05f, 0.07f}; }
+    void onInit() override {
+        bgColor_ = {0.04f, 0.05f, 0.07f};
+    }
 
-    void onUpdate() override
-    {
+    void onUpdate() override {
         elapsed_ += 0.016f;
         if (simulatePlayer_) {
             playerPos_.x = std::cos(elapsed_ * 0.3f) * CHUNK_SIZE * 3.0f;
@@ -54,14 +55,15 @@ protected:
         processLoadQueue();
     }
 
-    void buildUi() override
-    {
+    void buildUi() override {
         interactive_.buildDebugPanel("第90章：场景流式加载");
         ImGui::Separator();
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(940, 680), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("第90章：场景流式加载（Scene Streaming）", nullptr))
-        { ImGui::End(); return; }
+        if (!ImGui::Begin("第90章：场景流式加载（Scene Streaming）", nullptr)) {
+            ImGui::End();
+            return;
+        }
 
         if (ImGui::BeginTabBar("StreamTabs")) {
             if (ImGui::BeginTabItem("世界网格")) {
@@ -96,7 +98,8 @@ protected:
             if (ImGui::BeginTabItem("流式参数")) {
                 ImGui::SliderInt("加载半径 (Chunk)", &loadRadius_, 1, 6);
                 ImGui::SliderInt("卸载半径 (Chunk)", &unloadRadius_, 2, 8);
-                if (unloadRadius_ <= loadRadius_) unloadRadius_ = loadRadius_ + 1;
+                if (unloadRadius_ <= loadRadius_)
+                    unloadRadius_ = loadRadius_ + 1;
                 ImGui::SliderFloat("内存预算 (MB)", &memoryBudgetMB_, 64.0f, 512.0f, "%.0f");
                 ImGui::SliderInt("每帧最大加载数", &maxLoadsPerFrame_, 1, 4);
                 ImGui::Checkbox("模拟玩家移动", &simulatePlayer_);
@@ -110,38 +113,35 @@ protected:
             }
 
             if (ImGui::BeginTabItem("AsyncLoadQueue")) {
-                ImGui::TextWrapped(
-                    "class AsyncLoadQueue {\n"
-                    "    std::thread              worker_;\n"
-                    "    std::mutex               mutex_;\n"
-                    "    std::deque<LoadRequest>  pending_;\n"
-                    "    std::deque<LoadResult>   completed_;\n\n"
-                    "    // 工作线程：磁盘 IO + 反序列化\n"
-                    "    void workerLoop() {\n"
-                    "        while (running_) {\n"
-                    "            auto req = popPending();\n"
-                    "            ChunkData data = loadFromDisk(req.path);\n"
-                    "            pushCompleted({req.id, std::move(data)});\n"
-                    "        }\n"
-                    "    }\n\n"
-                    "    // 主线程：每帧 poll completed，创建 VkBuffer/VkImage\n"
-                    "    void uploadToGpu(LoadResult& r) {\n"
-                    "        stagingPool_.upload(r.mesh.vertices, vb_);\n"
-                    "        stagingPool_.upload(r.mesh.indices,  ib_);\n"
-                    "    }\n"
-                    "};");
+                ImGui::TextWrapped("class AsyncLoadQueue {\n"
+                                   "    std::thread              worker_;\n"
+                                   "    std::mutex               mutex_;\n"
+                                   "    std::deque<LoadRequest>  pending_;\n"
+                                   "    std::deque<LoadResult>   completed_;\n\n"
+                                   "    // 工作线程：磁盘 IO + 反序列化\n"
+                                   "    void workerLoop() {\n"
+                                   "        while (running_) {\n"
+                                   "            auto req = popPending();\n"
+                                   "            ChunkData data = loadFromDisk(req.path);\n"
+                                   "            pushCompleted({req.id, std::move(data)});\n"
+                                   "        }\n"
+                                   "    }\n\n"
+                                   "    // 主线程：每帧 poll completed，创建 VkBuffer/VkImage\n"
+                                   "    void uploadToGpu(LoadResult& r) {\n"
+                                   "        stagingPool_.upload(r.mesh.vertices, vb_);\n"
+                                   "        stagingPool_.upload(r.mesh.indices,  ib_);\n"
+                                   "    }\n"
+                                   "};");
                 ImGui::Spacing();
-                ImGui::Text("本帧处理加载 : %d  本帧卸载 : %d",
-                    loadsThisFrame_, unloadsThisFrame_);
+                ImGui::Text("本帧处理加载 : %d  本帧卸载 : %d", loadsThisFrame_, unloadsThisFrame_);
                 ImGui::EndTabItem();
             }
 
             if (ImGui::BeginTabItem("LRU 卸载")) {
-                ImGui::TextWrapped(
-                    "当内存超出 budget 时，按 LRU 卸载最久未访问的 Chunk：\n\n"
-                    "  sort(chunks, [](a,b){ return a.lastAccess < b.lastAccess; })\n"
-                    "  while (usedMemory > budget) unload(chunks.front())\n\n"
-                    "  lastAccessTime 在玩家进入 Chunk 或引用资源时更新");
+                ImGui::TextWrapped("当内存超出 budget 时，按 LRU 卸载最久未访问的 Chunk：\n\n"
+                                   "  sort(chunks, [](a,b){ return a.lastAccess < b.lastAccess; })\n"
+                                   "  while (usedMemory > budget) unload(chunks.front())\n\n"
+                                   "  lastAccessTime 在玩家进入 Chunk 或引用资源时更新");
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();
@@ -149,7 +149,7 @@ protected:
         ImGui::End();
     }
 
-private:
+  private:
     std::array<ChunkInfo, WORLD_CHUNKS * WORLD_CHUNKS> chunks_{};
     glm::vec3 playerPos_{0.0f, 0.0f, 0.0f};
     float elapsed_ = 0.0f;
@@ -164,25 +164,26 @@ private:
     int unloadsThisFrame_ = 0;
     std::deque<int> loadQueue_;
 
-    int chunkCoord(float worldPos) const
-    {
+    int chunkCoord(float worldPos) const {
         int c = int(std::floor(worldPos / CHUNK_SIZE)) + WORLD_CHUNKS / 2;
         return std::clamp(c, 0, WORLD_CHUNKS - 1);
     }
 
-    static ImU32 chunkColor(ChunkState s)
-    {
+    static ImU32 chunkColor(ChunkState s) {
         switch (s) {
-        case ChunkState::Unloaded:  return IM_COL32(50, 50, 55, 255);
-        case ChunkState::Loading:   return IM_COL32(200, 180, 50, 255);
-        case ChunkState::Loaded:    return IM_COL32(50, 140, 70, 255);
-        case ChunkState::Unloading: return IM_COL32(180, 50, 50, 255);
+        case ChunkState::Unloaded:
+            return IM_COL32(50, 50, 55, 255);
+        case ChunkState::Loading:
+            return IM_COL32(200, 180, 50, 255);
+        case ChunkState::Loaded:
+            return IM_COL32(50, 140, 70, 255);
+        case ChunkState::Unloading:
+            return IM_COL32(180, 50, 50, 255);
         }
         return IM_COL32(80, 80, 80, 255);
     }
 
-    void updateStreaming()
-    {
+    void updateStreaming() {
         int pcx = chunkCoord(playerPos_.x);
         int pcz = chunkCoord(playerPos_.z);
         loadsThisFrame_ = 0;
@@ -223,13 +224,13 @@ private:
             int oldest = -1;
             float oldestTime = 1e9f;
             for (int i = 0; i < WORLD_CHUNKS * WORLD_CHUNKS; ++i) {
-                if (chunks_[i].state == ChunkState::Loaded &&
-                    chunks_[i].lastAccessTime < oldestTime) {
+                if (chunks_[i].state == ChunkState::Loaded && chunks_[i].lastAccessTime < oldestTime) {
                     oldestTime = chunks_[i].lastAccessTime;
                     oldest = i;
                 }
             }
-            if (oldest < 0) break;
+            if (oldest < 0)
+                break;
             chunks_[oldest].state = ChunkState::Unloading;
             chunks_[oldest].loadProgress = 1.0f;
             ++unloadsThisFrame_;
@@ -237,14 +238,14 @@ private:
         }
     }
 
-    void processLoadQueue()
-    {
+    void processLoadQueue() {
         int processed = 0;
         while (!loadQueue_.empty() && processed < maxLoadsPerFrame_) {
             int idx = loadQueue_.front();
             loadQueue_.pop_front();
             auto& ch = chunks_[idx];
-            if (ch.state != ChunkState::Loading) continue;
+            if (ch.state != ChunkState::Loading)
+                continue;
             ch.loadProgress += 0.15f;
             if (ch.loadProgress >= 1.0f) {
                 ch.state = ChunkState::Loaded;
@@ -258,8 +259,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════════\n";
     std::cout << " 第90章：场景流式加载\n";
     std::cout << " 引擎架构系列 — ch90/6\n";

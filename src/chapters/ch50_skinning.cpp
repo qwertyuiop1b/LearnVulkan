@@ -29,10 +29,10 @@
 
 using namespace vulkan_tutorial;
 
-constexpr uint32_t WIDTH      = 800;
-constexpr uint32_t HEIGHT     = 600;
-constexpr int      MAX_FRAMES = 2;
-constexpr uint32_t MAX_BONES  = 64;
+constexpr uint32_t WIDTH = 800;
+constexpr uint32_t HEIGHT = 600;
+constexpr int MAX_FRAMES = 2;
+constexpr uint32_t MAX_BONES = 64;
 
 struct SceneUBO {
     alignas(16) glm::mat4 view;
@@ -47,8 +47,7 @@ struct BoneUBO {
     alignas(16) glm::mat4 bones[MAX_BONES];
 };
 
-static glm::vec3 sampleTranslation(const GltfAnimation& anim, float time)
-{
+static glm::vec3 sampleTranslation(const GltfAnimation& anim, float time) {
     for (const GltfAnimationChannel& channel : anim.channels) {
         if (channel.pathType != 0)
             continue;
@@ -72,27 +71,32 @@ static glm::vec3 sampleTranslation(const GltfAnimation& anim, float time)
 }
 
 class Ch50App {
-public:
-    void run() { initWindow(); initVulkan(); mainLoop(); cleanup(); }
+  public:
+    void run() {
+        initWindow();
+        initVulkan();
+        mainLoop();
+        cleanup();
+    }
 
-private:
-    GLFWwindow*      window_         = nullptr;
-    VkInstance       instance_       = VK_NULL_HANDLE;
-    VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
+  private:
+    GLFWwindow* window_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice         device_         = VK_NULL_HANDLE;
-    VkQueue          graphicsQueue_  = VK_NULL_HANDLE;
-    VkQueue          presentQueue_   = VK_NULL_HANDLE;
-    VkSwapchainKHR   swapchain_      = VK_NULL_HANDLE;
-    VkCommandPool    commandPool_    = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkCommandPool commandPool_ = VK_NULL_HANDLE;
     QueueFamilyIndices queueIndices_{};
-    VkFormat         swapchainFormat_ = VK_FORMAT_UNDEFINED;
-    VkExtent2D       swapchainExtent_{};
-    DepthResources   depth_{};
+    VkFormat swapchainFormat_ = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapchainExtent_{};
+    DepthResources depth_{};
 
-    VkRenderPass     renderPass_     = VK_NULL_HANDLE;
+    VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-    VkPipeline       pipeline_       = VK_NULL_HANDLE;
+    VkPipeline pipeline_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout setLayout_ = VK_NULL_HANDLE;
     VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> descriptorSets_;
@@ -107,34 +111,32 @@ private:
     std::vector<VkDeviceMemory> boneUBOMemories_;
     std::vector<void*> boneUBOMapped_;
 
-    VkBuffer       vertexBuffer_ = VK_NULL_HANDLE;
+    VkBuffer vertexBuffer_ = VK_NULL_HANDLE;
     VkDeviceMemory vertexMemory_ = VK_NULL_HANDLE;
-    VkBuffer       indexBuffer_  = VK_NULL_HANDLE;
-    VkDeviceMemory indexMemory_  = VK_NULL_HANDLE;
-    uint32_t       indexCount_   = 0;
+    VkBuffer indexBuffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory indexMemory_ = VK_NULL_HANDLE;
+    uint32_t indexCount_ = 0;
 
-    GltfScene      gltfScene_{};
-    GltfAnimation  animation_{};
-    bool           hasAnimation_ = false;
-    MaterialUBO    materialData_{};
+    GltfScene gltfScene_{};
+    GltfAnimation animation_{};
+    bool hasAnimation_ = false;
+    MaterialUBO materialData_{};
 
-    std::vector<VkImage>         swapchainImages_;
-    std::vector<VkImageView>     swapchainImageViews_;
-    std::vector<VkFramebuffer>   framebuffers_;
+    std::vector<VkImage> swapchainImages_;
+    std::vector<VkImageView> swapchainImageViews_;
+    std::vector<VkFramebuffer> framebuffers_;
     std::vector<VkCommandBuffer> commandBuffers_;
-    std::vector<VkSemaphore>   imageAvailableSems_;
-    std::vector<VkSemaphore>   renderFinishedSems_;
-    std::vector<VkFence>       inFlightFences_;
+    std::vector<VkSemaphore> imageAvailableSems_;
+    std::vector<VkSemaphore> renderFinishedSems_;
+    std::vector<VkFence> inFlightFences_;
     uint32_t currentFrame_ = 0;
-    bool     resized_      = false;
+    bool resized_ = false;
     InteractiveChapterTools interactive_;
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(WIDTH, HEIGHT,
-            "Ch50 - GPU 蒙皮动画（rig.gltf translation 通道）", nullptr, nullptr);
+        window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch50 - GPU 蒙皮动画（rig.gltf translation 通道）", nullptr, nullptr);
         interactive_.attachInput(window_);
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* w, int, int) {
@@ -142,13 +144,11 @@ private:
         });
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         createInstance(instance_);
         VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
         pickPhysicalDevice(instance_, surface_, physicalDevice_);
-        createLogicalDevice(physicalDevice_, surface_, device_, graphicsQueue_,
-                            presentQueue_, queueIndices_);
+        createLogicalDevice(physicalDevice_, surface_, device_, graphicsQueue_, presentQueue_, queueIndices_);
         depth_.format = findDepthFormat(physicalDevice_);
         loadModel();
         createSwapchain();
@@ -181,16 +181,14 @@ private:
         std::cout << "\n✅ GPU 蒙皮初始化完成（骨骼 UBO + translation 动画）\n";
     }
 
-    void loadModel()
-    {
+    void loadModel() {
         gltfScene_ = loadGltfScene("models/animated/rig.gltf");
         if (gltfScene_.meshes.empty())
             throw std::runtime_error("rig.gltf 未包含网格");
         if (!gltfScene_.animations.empty()) {
             animation_ = gltfScene_.animations[0];
             hasAnimation_ = true;
-            std::cout << "📦 动画: " << animation_.name
-                      << " 时长=" << animation_.duration << "s\n";
+            std::cout << "📦 动画: " << animation_.name << " 时长=" << animation_.duration << "s\n";
         }
         if (gltfScene_.meshes[0].materialIndex >= 0 &&
             gltfScene_.meshes[0].materialIndex < static_cast<int32_t>(gltfScene_.materials.size())) {
@@ -201,19 +199,16 @@ private:
         const ImageData fallbackTex = generateCheckerboard(64, 8);
         (void)fallbackTex;
         indexCount_ = static_cast<uint32_t>(gltfScene_.meshes[0].indices.size());
-        std::cout << "📦 顶点=" << gltfScene_.meshes[0].vertices.size()
-                  << " 索引=" << indexCount_ << "\n";
+        std::cout << "📦 顶点=" << gltfScene_.meshes[0].vertices.size() << " 索引=" << indexCount_ << "\n";
     }
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         SwapChainSupportDetails support = querySwapChainSupport(physicalDevice_, surface_);
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(support.formats);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(support.presentModes);
         swapchainExtent_ = chooseSwapExtent(support.capabilities, window_);
         uint32_t imageCount = support.capabilities.minImageCount + 1;
-        if (support.capabilities.maxImageCount > 0 &&
-            imageCount > support.capabilities.maxImageCount)
+        if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount)
             imageCount = support.capabilities.maxImageCount;
         VkSwapchainCreateInfoKHR ci{};
         ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -224,8 +219,7 @@ private:
         ci.imageExtent = swapchainExtent_;
         ci.imageArrayLayers = 1;
         ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        const uint32_t queueFamilies[] = {
-            queueIndices_.graphicsFamily.value(), queueIndices_.presentFamily.value()};
+        const uint32_t queueFamilies[] = {queueIndices_.graphicsFamily.value(), queueIndices_.presentFamily.value()};
         if (queueIndices_.graphicsFamily != queueIndices_.presentFamily) {
             ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
             ci.queueFamilyIndexCount = 2;
@@ -244,8 +238,7 @@ private:
         swapchainFormat_ = surfaceFormat.format;
     }
 
-    void createImageViews()
-    {
+    void createImageViews() {
         swapchainImageViews_.resize(swapchainImages_.size());
         for (size_t i = 0; i < swapchainImages_.size(); ++i) {
             VkImageViewCreateInfo ci{};
@@ -258,8 +251,7 @@ private:
         }
     }
 
-    void createRenderPass()
-    {
+    void createRenderPass() {
         VkAttachmentDescription colorAtt{};
         colorAtt.format = swapchainFormat_;
         colorAtt.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -284,12 +276,9 @@ private:
         VkSubpassDependency dep{};
         dep.srcSubpass = VK_SUBPASS_EXTERNAL;
         dep.dstSubpass = 0;
-        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                           VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         std::array<VkAttachmentDescription, 2> atts = {colorAtt, depthAtt};
         VkRenderPassCreateInfo rpi{};
         rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
@@ -302,8 +291,7 @@ private:
         VK_CHECK(vkCreateRenderPass(device_, &rpi, nullptr, &renderPass_));
     }
 
-    void createDescriptorSetLayout()
-    {
+    void createDescriptorSetLayout() {
         std::array<VkDescriptorSetLayoutBinding, 3> bindings{};
         bindings[0] = {0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
         bindings[1] = {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr};
@@ -320,15 +308,24 @@ private:
         VK_CHECK(vkCreatePipelineLayout(device_, &pl, nullptr, &pipelineLayout_));
     }
 
-    void createPipeline()
-    {
+    void createPipeline() {
         VkShaderModule vert = createShaderModuleFromFile(device_, "skinning.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "skinning.frag.spv");
         VkPipelineShaderStageCreateInfo stages[2] = {};
-        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
-        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
-                     VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
+        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_VERTEX_BIT,
+                     vert,
+                     "main",
+                     nullptr};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_FRAGMENT_BIT,
+                     frag,
+                     "main",
+                     nullptr};
         VkVertexInputBindingDescription bind{0, sizeof(GltfVertex), VK_VERTEX_INPUT_RATE_VERTEX};
         std::array<VkVertexInputAttributeDescription, 5> attrs{};
         attrs[0] = {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(GltfVertex, position)};
@@ -342,9 +339,11 @@ private:
         vi.pVertexBindingDescriptions = &bind;
         vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
         vi.pVertexAttributeDescriptions = attrs.data();
-        VkPipelineInputAssemblyStateCreateInfo ia{
-            VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, nullptr, 0,
-            VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE};
+        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                  nullptr,
+                                                  0,
+                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                                  VK_FALSE};
         VkPipelineViewportStateCreateInfo vs{
             VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr};
         VkPipelineRasterizationStateCreateInfo rs{};
@@ -389,8 +388,7 @@ private:
         vkDestroyShaderModule(device_, vert, nullptr);
     }
 
-    void createFramebuffers()
-    {
+    void createFramebuffers() {
         framebuffers_.resize(swapchainImageViews_.size());
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
             VkImageView att[] = {swapchainImageViews_[i], depth_.view};
@@ -406,8 +404,7 @@ private:
         }
     }
 
-    void createCommandPool()
-    {
+    void createCommandPool() {
         VkCommandPoolCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -415,8 +412,7 @@ private:
         VK_CHECK(vkCreateCommandPool(device_, &ci, nullptr, &commandPool_));
     }
 
-    void createMeshBuffers()
-    {
+    void createMeshBuffers() {
         std::vector<GltfVertex> vertices = gltfScene_.meshes[0].vertices;
         for (GltfVertex& v : vertices) {
             const float weightSum = v.weights.x + v.weights.y + v.weights.z + v.weights.w;
@@ -428,23 +424,30 @@ private:
         const std::vector<uint32_t>& indices = gltfScene_.meshes[0].indices;
         const VkDeviceSize vertexSize = sizeof(GltfVertex) * vertices.size();
         const VkDeviceSize indexSize = sizeof(uint32_t) * indices.size();
-        createBuffer(physicalDevice_, device_, vertexSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        createBuffer(physicalDevice_,
+                     device_,
+                     vertexSize,
+                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     vertexBuffer_, vertexMemory_);
+                     vertexBuffer_,
+                     vertexMemory_);
         void* mapped = nullptr;
         VK_CHECK(vkMapMemory(device_, vertexMemory_, 0, vertexSize, 0, &mapped));
         std::memcpy(mapped, vertices.data(), static_cast<size_t>(vertexSize));
         vkUnmapMemory(device_, vertexMemory_);
-        createBuffer(physicalDevice_, device_, indexSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        createBuffer(physicalDevice_,
+                     device_,
+                     indexSize,
+                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     indexBuffer_, indexMemory_);
+                     indexBuffer_,
+                     indexMemory_);
         VK_CHECK(vkMapMemory(device_, indexMemory_, 0, indexSize, 0, &mapped));
         std::memcpy(mapped, indices.data(), static_cast<size_t>(indexSize));
         vkUnmapMemory(device_, indexMemory_);
     }
 
-    void createUniformBuffers()
-    {
+    void createUniformBuffers() {
         sceneUBOs_.resize(MAX_FRAMES);
         sceneUBOMemories_.resize(MAX_FRAMES);
         sceneUBOMapped_.resize(MAX_FRAMES);
@@ -455,30 +458,35 @@ private:
         boneUBOMemories_.resize(MAX_FRAMES);
         boneUBOMapped_.resize(MAX_FRAMES);
         for (int i = 0; i < MAX_FRAMES; ++i) {
-            createBuffer(physicalDevice_, device_, sizeof(SceneUBO),
+            createBuffer(physicalDevice_,
+                         device_,
+                         sizeof(SceneUBO),
                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         sceneUBOs_[i], sceneUBOMemories_[i]);
-            VK_CHECK(vkMapMemory(device_, sceneUBOMemories_[i], 0, sizeof(SceneUBO), 0,
-                                 &sceneUBOMapped_[i]));
-            createBuffer(physicalDevice_, device_, sizeof(MaterialUBO),
+                         sceneUBOs_[i],
+                         sceneUBOMemories_[i]);
+            VK_CHECK(vkMapMemory(device_, sceneUBOMemories_[i], 0, sizeof(SceneUBO), 0, &sceneUBOMapped_[i]));
+            createBuffer(physicalDevice_,
+                         device_,
+                         sizeof(MaterialUBO),
                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         materialUBOs_[i], materialUBOMemories_[i]);
-            VK_CHECK(vkMapMemory(device_, materialUBOMemories_[i], 0, sizeof(MaterialUBO), 0,
-                                 &materialUBOMapped_[i]));
+                         materialUBOs_[i],
+                         materialUBOMemories_[i]);
+            VK_CHECK(vkMapMemory(device_, materialUBOMemories_[i], 0, sizeof(MaterialUBO), 0, &materialUBOMapped_[i]));
             std::memcpy(materialUBOMapped_[i], &materialData_, sizeof(materialData_));
-            createBuffer(physicalDevice_, device_, sizeof(BoneUBO),
+            createBuffer(physicalDevice_,
+                         device_,
+                         sizeof(BoneUBO),
                          VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         boneUBOs_[i], boneUBOMemories_[i]);
-            VK_CHECK(vkMapMemory(device_, boneUBOMemories_[i], 0, sizeof(BoneUBO), 0,
-                                 &boneUBOMapped_[i]));
+                         boneUBOs_[i],
+                         boneUBOMemories_[i]);
+            VK_CHECK(vkMapMemory(device_, boneUBOMemories_[i], 0, sizeof(BoneUBO), 0, &boneUBOMapped_[i]));
         }
     }
 
-    void createDescriptorPoolAndSets()
-    {
+    void createDescriptorPoolAndSets() {
         VkDescriptorPoolSize sizes[] = {
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(MAX_FRAMES * 3)},
         };
@@ -516,8 +524,7 @@ private:
         }
     }
 
-    void createCommandBuffers()
-    {
+    void createCommandBuffers() {
         commandBuffers_.resize(MAX_FRAMES);
         VkCommandBufferAllocateInfo ai{};
         ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -527,8 +534,7 @@ private:
         VK_CHECK(vkAllocateCommandBuffers(device_, &ai, commandBuffers_.data()));
     }
 
-    void createSyncObjects()
-    {
+    void createSyncObjects() {
         imageAvailableSems_.resize(MAX_FRAMES);
         renderFinishedSems_.resize(MAX_FRAMES);
         inFlightFences_.resize(MAX_FRAMES);
@@ -544,11 +550,9 @@ private:
         }
     }
 
-    void updateUniforms(uint32_t frameIndex, float time)
-    {
+    void updateUniforms(uint32_t frameIndex, float time) {
         SceneUBO scene{};
-        const float aspect = static_cast<float>(swapchainExtent_.width) /
-                             static_cast<float>(swapchainExtent_.height);
+        const float aspect = static_cast<float>(swapchainExtent_.width) / static_cast<float>(swapchainExtent_.height);
         scene.view = interactive_.camera().viewMatrix();
         scene.projection = interactive_.camera().projectionMatrix(aspect, 45.0f, 0.1f, 50.0f);
         std::memcpy(sceneUBOMapped_[frameIndex], &scene, sizeof(scene));
@@ -564,8 +568,7 @@ private:
         std::memcpy(boneUBOMapped_[frameIndex], &bones, sizeof(bones));
     }
 
-    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex, float time)
-    {
+    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex, float time) {
         updateUniforms(currentFrame_, time);
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -583,13 +586,17 @@ private:
         rp.pClearValues = clears.data();
         vkCmdBeginRenderPass(cmd, &rp, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
-        VkViewport vp{0.0f, 0.0f, static_cast<float>(swapchainExtent_.width),
-                      static_cast<float>(swapchainExtent_.height), 0.0f, 1.0f};
+        VkViewport vp{0.0f,
+                      0.0f,
+                      static_cast<float>(swapchainExtent_.width),
+                      static_cast<float>(swapchainExtent_.height),
+                      0.0f,
+                      1.0f};
         VkRect2D sc{{0, 0}, swapchainExtent_};
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &sc);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
-                                &descriptorSets_[currentFrame_], 0, nullptr);
+        vkCmdBindDescriptorSets(
+            cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &descriptorSets_[currentFrame_], 0, nullptr);
         VkDeviceSize offset = 0;
         vkCmdBindVertexBuffers(cmd, 0, 1, &vertexBuffer_, &offset);
         vkCmdBindIndexBuffer(cmd, indexBuffer_, 0, VK_INDEX_TYPE_UINT32);
@@ -600,12 +607,11 @@ private:
         VK_CHECK(vkEndCommandBuffer(cmd));
     }
 
-    void drawFrame()
-    {
+    void drawFrame() {
         vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
         uint32_t imageIndex = 0;
-        VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-            imageAvailableSems_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(
+            device_, swapchain_, UINT64_MAX, imageAvailableSems_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapchain();
             return;
@@ -649,8 +655,7 @@ private:
         currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES;
     }
 
-    void recreateSwapchain()
-    {
+    void recreateSwapchain() {
         int w = 0, h = 0;
         glfwGetFramebufferSize(window_, &w, &h);
         while (w == 0 || h == 0) {
@@ -658,20 +663,21 @@ private:
             glfwWaitEvents();
         }
         vkDeviceWaitIdle(device_);
-        for (auto fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
-        for (auto iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
+        for (auto fb : framebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto iv : swapchainImageViews_)
+            vkDestroyImageView(device_, iv, nullptr);
         destroyDepthResources(device_, depth_);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         createSwapchain();
         createImageViews();
         depth_ = createDepthResources(physicalDevice_, device_, swapchainExtent_);
         createFramebuffers();
-        interactive_.onSwapchainRecreated(renderPass_, swapchainFormat_,
-            static_cast<uint32_t>(swapchainImages_.size()));
+        interactive_.onSwapchainRecreated(
+            renderPass_, swapchainFormat_, static_cast<uint32_t>(swapchainImages_.size()));
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         std::cout << "🎨 rig.gltf 三角形 bounce 动画。ESC 退出。\n";
         auto lastTime = std::chrono::steady_clock::now();
         while (!glfwWindowShouldClose(window_)) {
@@ -687,8 +693,7 @@ private:
         vkDeviceWaitIdle(device_);
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         vkDestroyPipeline(device_, pipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
         vkDestroyDescriptorSetLayout(device_, setLayout_, nullptr);
@@ -709,8 +714,10 @@ private:
         vkDestroyBuffer(device_, indexBuffer_, nullptr);
         vkFreeMemory(device_, indexMemory_, nullptr);
         destroyDepthResources(device_, depth_);
-        for (auto fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
-        for (auto iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
+        for (auto fb : framebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto iv : swapchainImageViews_)
+            vkDestroyImageView(device_, iv, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         vkDestroyCommandPool(device_, commandPool_, nullptr);
@@ -728,8 +735,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════════════════\n";
     std::cout << " 第50章：GPU Skeletal Skinning\n";
     std::cout << "═══════════════════════════════════════════════════\n\n";

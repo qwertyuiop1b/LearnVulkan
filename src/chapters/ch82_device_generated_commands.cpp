@@ -31,46 +31,43 @@
 struct CommandToken {
     std::string type;
     std::string description;
-    int         cpuCostNs;  ///< 传统方式 CPU 开销（纳秒估算）
-    int         gpuCostNs;  ///< DGC 方式 GPU 开销（纳秒估算）
+    int cpuCostNs; ///< 传统方式 CPU 开销（纳秒估算）
+    int gpuCostNs; ///< DGC 方式 GPU 开销（纳秒估算）
 };
 
 // ─── 场景复杂度参数 ───────────────────────────────────────────────────────────
 struct SceneParams {
-    int totalObjects    = 10000;
-    int visibleObjects  = 3500;
-    int materialCount   = 200;
+    int totalObjects = 10000;
+    int visibleObjects = 3500;
+    int materialCount = 200;
     int pipelineChanges = 150;
 };
 
 class Ch82App : public DemoApp {
-protected:
-    void onInit() override
-    {
+  protected:
+    void onInit() override {
         bgColor_ = {0.04f, 0.06f, 0.08f};
         checkDgcSupport();
         buildCommandTokens();
     }
 
-    void buildUi() override
-    {
+    void buildUi() override {
         interactive_.buildDebugPanel("第82章：设备生成命令");
         ImGui::Separator();
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(940, 680), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin(
-                "第82章：设备生成命令（VK_EXT_device_generated_commands）", nullptr))
-        { ImGui::End(); return; }
+        if (!ImGui::Begin("第82章：设备生成命令（VK_EXT_device_generated_commands）", nullptr)) {
+            ImGui::End();
+            return;
+        }
 
         if (!dgcSupported_) {
             ImGui::Spacing();
-            ImGui::TextColored(ImVec4(1, 0.4f, 0.3f, 1),
-                "⚠  当前设备不支持 VK_EXT_device_generated_commands 扩展");
-            ImGui::TextWrapped(
-                "此扩展主要在高端 NVIDIA（Ampere+）和 AMD（RDNA2+）GPU 上支持。\n"
-                "macOS / MoltenVK 以及大多数移动端 GPU 暂不支持。\n\n"
-                "以下内容为教学性展示，演示 DGC 的架构思想与 API 用法。");
+            ImGui::TextColored(ImVec4(1, 0.4f, 0.3f, 1), "⚠  当前设备不支持 VK_EXT_device_generated_commands 扩展");
+            ImGui::TextWrapped("此扩展主要在高端 NVIDIA（Ampere+）和 AMD（RDNA2+）GPU 上支持。\n"
+                               "macOS / MoltenVK 以及大多数移动端 GPU 暂不支持。\n\n"
+                               "以下内容为教学性展示，演示 DGC 的架构思想与 API 用法。");
             ImGui::Separator();
         }
 
@@ -83,15 +80,14 @@ protected:
         ImGui::End();
     }
 
-private:
-    bool                     dgcSupported_ = false;
+  private:
+    bool dgcSupported_ = false;
     std::vector<CommandToken> tokens_;
-    SceneParams               scene_{};
-    int                       sliderObjects_    = 10000;
-    int                       sliderMaterials_  = 200;
+    SceneParams scene_{};
+    int sliderObjects_ = 10000;
+    int sliderMaterials_ = 200;
 
-    void checkDgcSupport()
-    {
+    void checkDgcSupport() {
         uint32_t extCount = 0;
         vkEnumerateDeviceExtensionProperties(physDev_, nullptr, &extCount, nullptr);
         std::vector<VkExtensionProperties> exts(extCount);
@@ -104,75 +100,63 @@ private:
         }
     }
 
-    void buildCommandTokens()
-    {
+    void buildCommandTokens() {
         tokens_ = {
-            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT",
-             "推送常量（Transform 矩阵等每物体数据）", 50, 5},
-            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT",
-             "绑定顶点缓冲区（每 Mesh 不同）",        80, 8},
-            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT",
-             "绑定索引缓冲区（每 Mesh 不同）",        80, 8},
-            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT",
-             "切换 Pipeline / Descriptor（每 Material）", 200, 15},
-            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT",
-             "执行索引绘制（真正的 Draw Call）",       30, 5},
+            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT", "推送常量（Transform 矩阵等每物体数据）", 50, 5},
+            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_VERTEX_BUFFER_EXT", "绑定顶点缓冲区（每 Mesh 不同）", 80, 8},
+            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_INDEX_BUFFER_EXT", "绑定索引缓冲区（每 Mesh 不同）", 80, 8},
+            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT", "切换 Pipeline / Descriptor（每 Material）", 200, 15},
+            {"VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT", "执行索引绘制（真正的 Draw Call）", 30, 5},
         };
     }
 
-    void buildTabPrinciple()
-    {
+    void buildTabPrinciple() {
         if (!ImGui::BeginTabItem("DGC 原理"))
             return;
 
-        ImGui::TextColored(ImVec4(1, 0.85f, 0.2f, 1),
-            "GPU 自主生成命令序列的工作原理");
+        ImGui::TextColored(ImVec4(1, 0.85f, 0.2f, 1), "GPU 自主生成命令序列的工作原理");
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1),
-            "传统 GPU Driven 的 CPU 瓶颈：");
-        ImGui::TextWrapped(
-            "// ① Compute Shader 做视锥剔除，写出可见物体列表\n"
-            "vkCmdDispatch(cmd, objectCount / 64, 1, 1);\n\n"
-            "// ② CPU 必须等待（或用 fence/barrier）读回结果\n"
-            "vkQueueWaitIdle(queue);\n"
-            "uint32_t* visible = (uint32_t*)mappedVisibilityBuffer;\n\n"
-            "// ③ CPU 循环处理每个可见物体（瓶颈！）\n"
-            "for (uint32_t i = 0; i < visibleCount; ++i) {\n"
-            "    uint32_t objId = visible[i];\n"
-            "    Material& mat  = materials[objects[objId].matId];\n"
-            "    // 每次 Material 变化都要重新绑定：\n"
-            "    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat.pipeline);\n"
-            "    vkCmdBindDescriptorSets(cmd, ..., mat.descriptorSet, ...);\n"
-            "    vkCmdDrawIndexed(cmd, objects[objId].indexCount, 1, ...);\n"
-            "}  // 10000 个物体 → 10000 次 CPU 函数调用！\n");
+        ImGui::TextColored(ImVec4(1, 0.5f, 0.5f, 1), "传统 GPU Driven 的 CPU 瓶颈：");
+        ImGui::TextWrapped("// ① Compute Shader 做视锥剔除，写出可见物体列表\n"
+                           "vkCmdDispatch(cmd, objectCount / 64, 1, 1);\n\n"
+                           "// ② CPU 必须等待（或用 fence/barrier）读回结果\n"
+                           "vkQueueWaitIdle(queue);\n"
+                           "uint32_t* visible = (uint32_t*)mappedVisibilityBuffer;\n\n"
+                           "// ③ CPU 循环处理每个可见物体（瓶颈！）\n"
+                           "for (uint32_t i = 0; i < visibleCount; ++i) {\n"
+                           "    uint32_t objId = visible[i];\n"
+                           "    Material& mat  = materials[objects[objId].matId];\n"
+                           "    // 每次 Material 变化都要重新绑定：\n"
+                           "    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mat.pipeline);\n"
+                           "    vkCmdBindDescriptorSets(cmd, ..., mat.descriptorSet, ...);\n"
+                           "    vkCmdDrawIndexed(cmd, objects[objId].indexCount, 1, ...);\n"
+                           "}  // 10000 个物体 → 10000 次 CPU 函数调用！\n");
 
         ImGui::Spacing();
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1),
-            "DGC 方式：GPU 全程自主，CPU 只调用一次：");
-        ImGui::TextWrapped(
-            "// ① 预先定义命令序列模板（IndirectCommandsLayout）\n"
-            "//    告诉驱动每个[命令槽]的格式\n"
-            "VkIndirectCommandsLayoutTokenEXT tokens[] = {\n"
-            "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT, ...}, // Pipeline\n"
-            "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT, ...}, // Transform\n"
-            "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT,  ...}, // Draw\n"
-            "};\n"
-            "VkIndirectCommandsLayoutCreateInfoEXT layoutCI{};\n"
-            "layoutCI.tokenCount = 3;\n"
-            "layoutCI.pTokens    = tokens;\n"
-            "vkCreateIndirectCommandsLayoutEXT(device, &layoutCI, nullptr, &cmdLayout);\n\n"
-            "// ② Compute Shader 根据剔除结果，直接向命令缓冲区写入数据\n"
-            "//    （Shader 端写：pipeline handle + push_constant + draw args）\n\n"
-            "// ③ CPU 只需一次调用执行所有生成的命令\n"
-            "vkCmdPreprocessGeneratedCommandsEXT(cmd, &preprocessInfo, stateCmd);\n"
-            "// 插入 pipeline barrier\n"
-            "vkCmdExecuteGeneratedCommandsEXT(cmd, VK_FALSE, &executeInfo);\n"
-            "// 完成！无论多少物体，CPU 开销固定不变\n");
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "DGC 方式：GPU 全程自主，CPU 只调用一次：");
+        ImGui::TextWrapped("// ① 预先定义命令序列模板（IndirectCommandsLayout）\n"
+                           "//    告诉驱动每个[命令槽]的格式\n"
+                           "VkIndirectCommandsLayoutTokenEXT tokens[] = {\n"
+                           "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_EXECUTION_SET_EXT, ...}, // Pipeline\n"
+                           "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT, ...}, // Transform\n"
+                           "    {VK_INDIRECT_COMMANDS_TOKEN_TYPE_DRAW_INDEXED_EXT,  ...}, // Draw\n"
+                           "};\n"
+                           "VkIndirectCommandsLayoutCreateInfoEXT layoutCI{};\n"
+                           "layoutCI.tokenCount = 3;\n"
+                           "layoutCI.pTokens    = tokens;\n"
+                           "vkCreateIndirectCommandsLayoutEXT(device, &layoutCI, nullptr, &cmdLayout);\n\n"
+                           "// ② Compute Shader 根据剔除结果，直接向命令缓冲区写入数据\n"
+                           "//    （Shader 端写：pipeline handle + push_constant + draw args）\n\n"
+                           "// ③ CPU 只需一次调用执行所有生成的命令\n"
+                           "vkCmdPreprocessGeneratedCommandsEXT(cmd, &preprocessInfo, stateCmd);\n"
+                           "// 插入 pipeline barrier\n"
+                           "vkCmdExecuteGeneratedCommandsEXT(cmd, VK_FALSE, &executeInfo);\n"
+                           "// 完成！无论多少物体，CPU 开销固定不变\n");
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -180,15 +164,13 @@ private:
 
         ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1), "命令序列中的 Token 类型：");
         for (const auto& token : tokens_) {
-            ImGui::BulletText("%-55s — %s",
-                token.type.c_str(), token.description.c_str());
+            ImGui::BulletText("%-55s — %s", token.type.c_str(), token.description.c_str());
         }
 
         ImGui::EndTabItem();
     }
 
-    void buildTabUseCasesAndLimits()
-    {
+    void buildTabUseCasesAndLimits() {
         if (!ImGui::BeginTabItem("使用场景与限制"))
             return;
 
@@ -217,19 +199,14 @@ private:
         struct HardwareEntry {
             const char* hardware;
             const char* support;
-            ImVec4      color;
+            ImVec4 color;
         };
         HardwareEntry entries[] = {
-            {"NVIDIA RTX 3000/4000/5000 系列（Ampere/Ada/Blackwell）",
-             "✅ 完整支持", {0.3f, 1.0f, 0.5f, 1}},
-            {"AMD RX 6000/7000 系列（RDNA2/RDNA3）",
-             "✅ 完整支持", {0.3f, 1.0f, 0.5f, 1}},
-            {"Intel Arc A 系列（Alchemist）",
-             "⚠ 部分支持（驱动版本相关）", {1, 0.85f, 0.3f, 1}},
-            {"Apple Silicon（M1/M2/M3/M4）/ MoltenVK",
-             "❌ 不支持（Metal 无对应原语）", {1, 0.4f, 0.4f, 1}},
-            {"移动端 GPU（Adreno/Mali）",
-             "❌ 通常不支持", {1, 0.4f, 0.4f, 1}},
+            {"NVIDIA RTX 3000/4000/5000 系列（Ampere/Ada/Blackwell）", "✅ 完整支持", {0.3f, 1.0f, 0.5f, 1}},
+            {"AMD RX 6000/7000 系列（RDNA2/RDNA3）", "✅ 完整支持", {0.3f, 1.0f, 0.5f, 1}},
+            {"Intel Arc A 系列（Alchemist）", "⚠ 部分支持（驱动版本相关）", {1, 0.85f, 0.3f, 1}},
+            {"Apple Silicon（M1/M2/M3/M4）/ MoltenVK", "❌ 不支持（Metal 无对应原语）", {1, 0.4f, 0.4f, 1}},
+            {"移动端 GPU（Adreno/Mali）", "❌ 通常不支持", {1, 0.4f, 0.4f, 1}},
         };
         for (const auto& e : entries) {
             ImGui::TextColored(e.color, "  %-55s %s", e.hardware, e.support);
@@ -246,8 +223,7 @@ private:
         ImGui::EndTabItem();
     }
 
-    void buildTabFlowComparison()
-    {
+    void buildTabFlowComparison() {
         if (!ImGui::BeginTabItem("流程对比与性能估算"))
             return;
 
@@ -255,28 +231,26 @@ private:
         ImGui::Separator();
         ImGui::Spacing();
 
-        ImGui::SliderInt("场景物体总数", &sliderObjects_,   100,  50000);
-        ImGui::SliderInt("材质种类数量", &sliderMaterials_,   1,    500);
+        ImGui::SliderInt("场景物体总数", &sliderObjects_, 100, 50000);
+        ImGui::SliderInt("材质种类数量", &sliderMaterials_, 1, 500);
         ImGui::Spacing();
 
-        scene_.totalObjects    = sliderObjects_;
-        scene_.visibleObjects  = sliderObjects_ * 35 / 100;
-        scene_.materialCount   = sliderMaterials_;
+        scene_.totalObjects = sliderObjects_;
+        scene_.visibleObjects = sliderObjects_ * 35 / 100;
+        scene_.materialCount = sliderMaterials_;
         scene_.pipelineChanges = sliderMaterials_ * 75 / 100;
 
         // ── 传统流程 ──────────────────────────────────────────────────────────
         ImGui::TextColored(ImVec4(1, 0.45f, 0.45f, 1), "传统流程（CPU 主导）：");
         ImGui::Text("  ① GPU 剔除 Compute Dispatch        → GPU 执行（异步）");
         ImGui::Text("  ② CPU 等待 Fence / Barrier          → CPU 阻塞");
-        ImGui::Text("  ③ CPU 遍历 %5d 个可见物体         → CPU 循环",
-            scene_.visibleObjects);
-        ImGui::Text("  ④ CPU vkCmdBindPipeline × %4d 次  → %6d 次驱动调用",
-            scene_.pipelineChanges, scene_.pipelineChanges);
-        ImGui::Text("  ⑤ CPU vkCmdDraw          × %4d 次  → %6d 次驱动调用",
-            scene_.visibleObjects, scene_.visibleObjects);
+        ImGui::Text("  ③ CPU 遍历 %5d 个可见物体         → CPU 循环", scene_.visibleObjects);
+        ImGui::Text(
+            "  ④ CPU vkCmdBindPipeline × %4d 次  → %6d 次驱动调用", scene_.pipelineChanges, scene_.pipelineChanges);
+        ImGui::Text(
+            "  ⑤ CPU vkCmdDraw          × %4d 次  → %6d 次驱动调用", scene_.visibleObjects, scene_.visibleObjects);
         int tradCpuCalls = scene_.pipelineChanges * 3 + scene_.visibleObjects;
-        ImGui::TextColored(ImVec4(1, 0.45f, 0.45f, 1),
-            "  CPU 驱动调用总次数：约 %d 次/帧", tradCpuCalls);
+        ImGui::TextColored(ImVec4(1, 0.45f, 0.45f, 1), "  CPU 驱动调用总次数：约 %d 次/帧", tradCpuCalls);
 
         float tradMs = float(tradCpuCalls) * 0.005f;
         ImGui::Text("  CPU 端估算耗时：%.2f ms（@5ns/调用）", tradMs);
@@ -293,8 +267,7 @@ private:
         ImGui::Text("  ② GPU 写命令缓冲区（Compute Shader） → GPU 内部，无 CPU 参与");
         ImGui::Text("  ③ vkCmdPreprocessGeneratedCommandsEXT → CPU 1 次调用");
         ImGui::Text("  ④ vkCmdExecuteGeneratedCommandsEXT    → CPU 1 次调用");
-        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1),
-            "  CPU 驱动调用总次数：固定 2 次/帧（无论物体数量！）");
+        ImGui::TextColored(ImVec4(0.3f, 1.0f, 0.5f, 1), "  CPU 驱动调用总次数：固定 2 次/帧（无论物体数量！）");
 
         float dgcMs = 0.01f;
         ImGui::Text("  CPU 端估算耗时：< %.2f ms（固定开销）", dgcMs);
@@ -305,15 +278,13 @@ private:
         ImGui::Spacing();
 
         float speedup = tradMs / std::max(dgcMs, 0.001f);
-        ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1),
-            "理论 CPU 端提速：%.0fx  （物体越多，优势越大）", speedup);
+        ImGui::TextColored(ImVec4(1, 0.85f, 0.3f, 1), "理论 CPU 端提速：%.0fx  （物体越多，优势越大）", speedup);
         ImGui::Spacing();
 
         // ── 命令 Token CPU vs GPU 耗时对比表 ─────────────────────────────────
         ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1), "各 Token 类型耗时对比：");
         ImGui::Separator();
-        if (ImGui::BeginTable("TokenTable", 4,
-                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+        if (ImGui::BeginTable("TokenTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Token 类型");
             ImGui::TableSetupColumn("说明");
             ImGui::TableSetupColumn("CPU 耗时（ns/次）");
@@ -321,10 +292,14 @@ private:
             ImGui::TableHeadersRow();
             for (const auto& t : tokens_) {
                 ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::TextUnformatted(t.type.c_str());
-                ImGui::TableNextColumn(); ImGui::TextUnformatted(t.description.c_str());
-                ImGui::TableNextColumn(); ImGui::Text("%d", t.cpuCostNs);
-                ImGui::TableNextColumn(); ImGui::Text("%d", t.gpuCostNs);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(t.type.c_str());
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(t.description.c_str());
+                ImGui::TableNextColumn();
+                ImGui::Text("%d", t.cpuCostNs);
+                ImGui::TableNextColumn();
+                ImGui::Text("%d", t.gpuCostNs);
             }
             ImGui::EndTable();
         }
@@ -333,8 +308,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════════\n";
     std::cout << " 第82章：设备生成命令（VK_EXT_device_generated_commands）\n";
     std::cout << " Vulkan 现代扩展系列 — ch82\n";

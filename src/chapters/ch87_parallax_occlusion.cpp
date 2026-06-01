@@ -19,23 +19,26 @@
 #include <iostream>
 
 class Ch87App : public DemoApp {
-protected:
-    void onInit() override { bgColor_ = {0.04f, 0.05f, 0.07f}; }
+  protected:
+    void onInit() override {
+        bgColor_ = {0.04f, 0.05f, 0.07f};
+    }
 
-    void onUpdate() override
-    {
-        if (animateView_) viewAngle_ += 0.4f * 0.016f;
+    void onUpdate() override {
+        if (animateView_)
+            viewAngle_ += 0.4f * 0.016f;
         simulatePom();
     }
 
-    void buildUi() override
-    {
+    void buildUi() override {
         interactive_.buildDebugPanel("第87章：视差遮蔽贴图");
         ImGui::Separator();
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(940, 680), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("第87章：视差遮蔽贴图（POM）", nullptr))
-        { ImGui::End(); return; }
+        if (!ImGui::Begin("第87章：视差遮蔽贴图（POM）", nullptr)) {
+            ImGui::End();
+            return;
+        }
 
         if (ImGui::BeginTabBar("PomTabs")) {
             if (ImGui::BeginTabItem("算法对比")) {
@@ -43,18 +46,17 @@ protected:
                 ImGui::Separator();
                 const char* modes[] = {"法线贴图", "视差映射", "POM（射线步进）"};
                 ImGui::Combo("当前模式", &mappingMode_, modes, 3);
-                ImGui::TextWrapped(
-                    "POM 射线步进（pom.frag）：\n\n"
-                    "  vec3 V = normalize(cameraPos - worldPos);\n"
-                    "  vec3 Vt = normalize(TBN * V);\n"
-                    "  float stepSize = 1.0 / numSteps;\n"
-                    "  for (int i = 0; i < numSteps; ++i) {\n"
-                    "      float layerDepth = i * stepSize;\n"
-                    "      vec2 uv = texCoord - Vt.xy * layerDepth * heightScale;\n"
-                    "      float sampledH = texture(heightMap, uv).r;\n"
-                    "      if (layerDepth >= sampledH) break;  // 命中\n"
-                    "  }\n"
-                    "  // 二分精修提高精度");
+                ImGui::TextWrapped("POM 射线步进（pom.frag）：\n\n"
+                                   "  vec3 V = normalize(cameraPos - worldPos);\n"
+                                   "  vec3 Vt = normalize(TBN * V);\n"
+                                   "  float stepSize = 1.0 / numSteps;\n"
+                                   "  for (int i = 0; i < numSteps; ++i) {\n"
+                                   "      float layerDepth = i * stepSize;\n"
+                                   "      vec2 uv = texCoord - Vt.xy * layerDepth * heightScale;\n"
+                                   "      float sampledH = texture(heightMap, uv).r;\n"
+                                   "      if (layerDepth >= sampledH) break;  // 命中\n"
+                                   "  }\n"
+                                   "  // 二分精修提高精度");
                 ImGui::EndTabItem();
             }
 
@@ -77,8 +79,7 @@ protected:
                 ImDrawList* dl = ImGui::GetWindowDrawList();
                 ImVec2 pos = ImGui::GetCursorScreenPos();
                 ImVec2 size(420, 200);
-                dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                    IM_COL32(20, 25, 35, 255));
+                dl->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(20, 25, 35, 255));
                 float brickH = 0.08f;
                 float mortarH = 0.0f;
                 for (int i = 0; i < 40; ++i) {
@@ -87,14 +88,14 @@ protected:
                     h += 0.02f * std::sin(t * 20.0f);
                     float px = pos.x + t * size.x;
                     float py = pos.y + size.y - h * size.y * 3.0f;
-                    dl->AddLine(ImVec2(px, pos.y + size.y), ImVec2(px, py),
-                        IM_COL32(180, 120, 80, 255), 2.0f);
+                    dl->AddLine(ImVec2(px, pos.y + size.y), ImVec2(px, py), IM_COL32(180, 120, 80, 255), 2.0f);
                 }
                 float rayX = pos.x + (0.5f + 0.3f * std::cos(viewAngle_)) * size.x;
                 float rayY = pos.y + 10.0f;
                 dl->AddLine(ImVec2(rayX, rayY),
-                    ImVec2(rayX - uvOffset_ * size.x * 5, pos.y + size.y - hitDepth_ * size.y),
-                    IM_COL32(255, 255, 100, 200), 2.0f);
+                            ImVec2(rayX - uvOffset_ * size.x * 5, pos.y + size.y - hitDepth_ * size.y),
+                            IM_COL32(255, 255, 100, 200),
+                            2.0f);
                 ImGui::Dummy(size);
                 ImGui::EndTabItem();
             }
@@ -103,7 +104,7 @@ protected:
         ImGui::End();
     }
 
-private:
+  private:
     int mappingMode_ = 2;
     float heightScale_ = 0.05f;
     int numSteps_ = 24;
@@ -115,8 +116,7 @@ private:
     bool selfOccluded_ = false;
     int aluCost_ = 0;
 
-    void simulatePom()
-    {
+    void simulatePom() {
         float viewTilt = std::abs(std::sin(viewAngle_));
         switch (mappingMode_) {
         case 0:
@@ -141,8 +141,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════════\n";
     std::cout << " 第87章：视差遮蔽贴图（POM）\n";
     std::cout << " 材质渲染系列 — ch87/6\n";

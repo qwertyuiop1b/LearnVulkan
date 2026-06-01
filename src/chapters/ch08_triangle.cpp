@@ -52,55 +52,52 @@
 #include <set>
 #include <stdexcept>
 
-constexpr uint32_t WIDTH           = 800;
-constexpr uint32_t HEIGHT          = 600;
-constexpr int      MAX_FRAMES_IN_FLIGHT = 2;   // 最多允许 2 帧同时在飞行
-
+constexpr uint32_t WIDTH = 800;
+constexpr uint32_t HEIGHT = 600;
+constexpr int MAX_FRAMES_IN_FLIGHT = 2; // 最多允许 2 帧同时在飞行
 
 class Ch08App {
-public:
-    void run()
-    {
+  public:
+    void run() {
         initWindow();
         initVulkan();
-        mainLoop();    // ← 包含真正的渲染
+        mainLoop(); // ← 包含真正的渲染
         cleanup();
     }
 
-private:
-    GLFWwindow*      window_         = nullptr;
-    VkInstance       instance_       = VK_NULL_HANDLE;
-    VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
+  private:
+    GLFWwindow* window_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice         device_         = VK_NULL_HANDLE;
-    VkQueue          graphicsQueue_  = VK_NULL_HANDLE;
-    VkQueue          presentQueue_   = VK_NULL_HANDLE;
-    VkSwapchainKHR   swapchain_      = VK_NULL_HANDLE;
-    VkRenderPass     renderPass_     = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-    VkPipeline       pipeline_       = VK_NULL_HANDLE;
-    VkCommandPool    commandPool_    = VK_NULL_HANDLE;
+    VkPipeline pipeline_ = VK_NULL_HANDLE;
+    VkCommandPool commandPool_ = VK_NULL_HANDLE;
 
-    std::vector<VkImage>         swapchainImages_;
-    std::vector<VkImageView>     swapchainImageViews_;
-    std::vector<VkFramebuffer>   framebuffers_;
+    std::vector<VkImage> swapchainImages_;
+    std::vector<VkImageView> swapchainImageViews_;
+    std::vector<VkFramebuffer> framebuffers_;
     std::vector<VkCommandBuffer> commandBuffers_;
-    VkFormat                     swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
-    VkExtent2D                   swapchainExtent_{};
-    QueueFamilyIndices           queueIndices_;
+    VkFormat swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapchainExtent_{};
+    QueueFamilyIndices queueIndices_;
 
     // ─── 同步对象 ────────────────────────────────────────────────────────────
     // imageAvailableSemaphores_ 和 inFlightFences_ 保护“飞行帧”资源。
     // renderFinishedSemaphores_ 会交给 vkQueuePresentKHR 使用，必须按交换链图像分配。
     std::vector<VkSemaphore> imageAvailableSemaphores_;
     std::vector<VkSemaphore> renderFinishedSemaphores_;
-    std::vector<VkFence>     inFlightFences_;
-    uint32_t                 currentFrame_ = 0;
+    std::vector<VkFence> inFlightFences_;
+    uint32_t currentFrame_ = 0;
 
     bool framebufferResized_ = false;
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch08 - 彩色三角形 ★", nullptr, nullptr);
@@ -108,14 +105,12 @@ private:
         glfwSetFramebufferSizeCallback(window_, framebufferResizeCallback);
     }
 
-    static void framebufferResizeCallback(GLFWwindow* win, int /*w*/, int /*h*/)
-    {
+    static void framebufferResizeCallback(GLFWwindow* win, int /*w*/, int /*h*/) {
         auto* app = reinterpret_cast<Ch08App*>(glfwGetWindowUserPointer(win));
         app->framebufferResized_ = true;
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         createInstance();
         createSurface();
         pickPhysicalDevice();
@@ -127,13 +122,12 @@ private:
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
-        createSyncObjects();    // ← 新增：创建同步原语
+        createSyncObjects(); // ← 新增：创建同步原语
     }
 
     // ─── 核心新增：创建同步对象 ───────────────────────────────────────────────
 
-    void createSyncObjects()
-    {
+    void createSyncObjects() {
         imageAvailableSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences_.resize(MAX_FRAMES_IN_FLIGHT);
 
@@ -151,13 +145,11 @@ private:
             VK_CHECK(vkCreateFence(device_, &fenceCI, nullptr, &inFlightFences_[i]));
         }
         createRenderFinishedSemaphores();
-        std::cout << "✅ 同步对象已创建（" << MAX_FRAMES_IN_FLIGHT
-                  << " 个飞行帧，" << renderFinishedSemaphores_.size()
+        std::cout << "✅ 同步对象已创建（" << MAX_FRAMES_IN_FLIGHT << " 个飞行帧，" << renderFinishedSemaphores_.size()
                   << " 个呈现信号量）\n";
     }
 
-    void createRenderFinishedSemaphores()
-    {
+    void createRenderFinishedSemaphores() {
         renderFinishedSemaphores_.resize(swapchainImages_.size());
 
         VkSemaphoreCreateInfo semCI{};
@@ -168,8 +160,7 @@ private:
         }
     }
 
-    void cleanupRenderFinishedSemaphores()
-    {
+    void cleanupRenderFinishedSemaphores() {
         for (auto semaphore : renderFinishedSemaphores_) {
             vkDestroySemaphore(device_, semaphore, nullptr);
         }
@@ -178,22 +169,19 @@ private:
 
     // ─── 核心：渲染一帧 ───────────────────────────────────────────────────────
 
-    void drawFrame()
-    {
+    void drawFrame() {
         // ① 等待当前帧的 Fence（确保上一轮此帧的 GPU 工作已完成）
         //    UINT64_MAX = 无限等待
-        vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_],
-                        VK_TRUE, UINT64_MAX);
+        vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
 
         // ② 从交换链获取下一张可用图像
         uint32_t imageIndex = 0;
-        VkResult result = vkAcquireNextImageKHR(
-            device_,
-            swapchain_,
-            UINT64_MAX,                                         // 超时时间
-            imageAvailableSemaphores_[currentFrame_],          // 获取完成时 signal 此信号量
-            VK_NULL_HANDLE,                                     // 不使用 Fence
-            &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(device_,
+                                                swapchain_,
+                                                UINT64_MAX,                               // 超时时间
+                                                imageAvailableSemaphores_[currentFrame_], // 获取完成时 signal 此信号量
+                                                VK_NULL_HANDLE,                           // 不使用 Fence
+                                                &imageIndex);
 
         // 交换链过期（窗口大小改变）→ 重建交换链
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -215,40 +203,39 @@ private:
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
         // 等待此信号量 signal 后才开始执行（图像获取完成才能开始渲染）
-        VkSemaphore          waitSemaphores[]  = { imageAvailableSemaphores_[currentFrame_] };
+        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores_[currentFrame_]};
         // 在管线的颜色输出阶段等待（更细粒度，允许顶点着色器先跑）
-        VkPipelineStageFlags waitStages[]      = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        submitInfo.waitSemaphoreCount   = 1;
-        submitInfo.pWaitSemaphores      = waitSemaphores;
-        submitInfo.pWaitDstStageMask    = waitStages;
-        submitInfo.commandBufferCount   = 1;
-        submitInfo.pCommandBuffers      = &commandBuffers_[currentFrame_];
+        VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffers_[currentFrame_];
 
         // 命令执行完成后 signal 此信号量（通知呈现队列可以显示了）。
         // 这个信号量会被 presentation engine 消费，所以按交换链图像索引复用；
         // 再次 acquire 到同一个 imageIndex 时，表示它上一次的 present 已经不再使用该信号量。
-        VkSemaphore signalSemaphores[]  = { renderFinishedSemaphores_[imageIndex] };
+        VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[imageIndex]};
         submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores    = signalSemaphores;
+        submitInfo.pSignalSemaphores = signalSemaphores;
 
         // inFlightFences_ 在所有提交的命令完成后被 signal（让 CPU 知道此帧完成）
         VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]));
 
         // ⑥ 呈现：将渲染好的图像显示到屏幕
         VkPresentInfoKHR presentInfo{};
-        presentInfo.sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         presentInfo.waitSemaphoreCount = 1;
-        presentInfo.pWaitSemaphores    = signalSemaphores;   // 等待渲染完成
+        presentInfo.pWaitSemaphores = signalSemaphores; // 等待渲染完成
 
-        VkSwapchainKHR swapchains[] = { swapchain_ };
-        presentInfo.swapchainCount  = 1;
-        presentInfo.pSwapchains     = swapchains;
-        presentInfo.pImageIndices   = &imageIndex;
+        VkSwapchainKHR swapchains[] = {swapchain_};
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapchains;
+        presentInfo.pImageIndices = &imageIndex;
 
         result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR
-            || framebufferResized_) {
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized_) {
             framebufferResized_ = false;
             recreateSwapchain();
         } else if (result != VK_SUCCESS) {
@@ -261,8 +248,7 @@ private:
 
     // ─── 重建交换链（窗口大小改变时） ────────────────────────────────────────
 
-    void recreateSwapchain()
-    {
+    void recreateSwapchain() {
         // 处理窗口最小化（帧缓冲大小为 0）
         int width = 0, height = 0;
         glfwGetFramebufferSize(window_, &width, &height);
@@ -282,16 +268,16 @@ private:
         std::cout << "🔄 交换链已重建（" << width << "x" << height << "）\n";
     }
 
-    void cleanupSwapchain()
-    {
-        for (auto& fb : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
-        for (auto& iv : swapchainImageViews_) vkDestroyImageView(device_, iv, nullptr);
+    void cleanupSwapchain() {
+        for (auto& fb : framebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto& iv : swapchainImageViews_)
+            vkDestroyImageView(device_, iv, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         cleanupRenderFinishedSemaphores();
     }
 
-    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex)
-    {
+    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
@@ -310,21 +296,20 @@ private:
 
         VkViewport vp{0.0f, 0.0f, (float)swapchainExtent_.width, (float)swapchainExtent_.height, 0.0f, 1.0f};
         vkCmdSetViewport(cmd, 0, 1, &vp);
-        VkRect2D sc{{0,0}, swapchainExtent_};
+        VkRect2D sc{{0, 0}, swapchainExtent_};
         vkCmdSetScissor(cmd, 0, 1, &sc);
 
-        vkCmdDraw(cmd, 3, 1, 0, 0);   // 3 顶点，1 实例
+        vkCmdDraw(cmd, 3, 1, 0, 0); // 3 顶点，1 实例
         vkCmdEndRenderPass(cmd);
         VK_CHECK(vkEndCommandBuffer(cmd));
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         std::cout << "\n🎨 开始渲染！你应该看到一个彩色三角形...\n";
         std::cout << "   按 ESC 或关闭窗口退出\n\n";
 
         uint64_t frameCount = 0;
-        auto     startTime  = std::chrono::steady_clock::now();
+        auto startTime = std::chrono::steady_clock::now();
 
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
@@ -336,12 +321,12 @@ private:
             ++frameCount;
 
             // 每5秒打印一次帧率
-            auto now     = std::chrono::steady_clock::now();
+            auto now = std::chrono::steady_clock::now();
             auto elapsed = std::chrono::duration<float>(now - startTime).count();
             if (elapsed >= 5.0f) {
                 std::cout << "📊 FPS: " << static_cast<uint64_t>(frameCount / elapsed) << "\n";
                 frameCount = 0;
-                startTime  = now;
+                startTime = now;
             }
         }
 
@@ -351,18 +336,22 @@ private:
 
     // ─── 以下为前几章的初始化代码 ────────────────────────────────────────────
 
-    void createInstance()
-    {
-        VkApplicationInfo ai{}; ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    void createInstance() {
+        VkApplicationInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         ai.apiVersion = VK_API_VERSION_1_3;
         auto exts = getRequiredInstanceExtensions();
-        VkInstanceCreateInfo ci{}; ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        VkInstanceCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         ci.pApplicationInfo = &ai;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
 #ifdef __APPLE__
+#ifdef __APPLE__
         ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif 
+#endif
+
+#endif
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -370,36 +359,47 @@ private:
         VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
     }
 
-    void createSurface() { VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_)); }
+    void createSurface() {
+        VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
+    }
 
-    void pickPhysicalDevice()
-    {
-        uint32_t count = 0; vkEnumeratePhysicalDevices(instance_, &count, nullptr);
+    void pickPhysicalDevice() {
+        uint32_t count = 0;
+        vkEnumeratePhysicalDevices(instance_, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
         vkEnumeratePhysicalDevices(instance_, &count, devices.data());
         for (auto& d : devices) {
             if (findQueueFamilies(d, surface_).isComplete() && checkDeviceExtensionSupport(d)) {
-                physicalDevice_ = d; break;
+                physicalDevice_ = d;
+                break;
             }
         }
-        if (physicalDevice_ == VK_NULL_HANDLE) throw std::runtime_error("无合适GPU");
-        VkPhysicalDeviceProperties p; vkGetPhysicalDeviceProperties(physicalDevice_, &p);
+        if (physicalDevice_ == VK_NULL_HANDLE)
+            throw std::runtime_error("无合适GPU");
+        VkPhysicalDeviceProperties p;
+        vkGetPhysicalDeviceProperties(physicalDevice_, &p);
         std::cout << "✅ GPU: " << p.deviceName << "\n";
     }
 
-    void createLogicalDevice()
-    {
+    void createLogicalDevice() {
         queueIndices_ = findQueueFamilies(physicalDevice_, surface_);
         std::set<uint32_t> fams = {queueIndices_.graphicsFamily.value(), queueIndices_.presentFamily.value()};
         const float pri = 1.0f;
         std::vector<VkDeviceQueueCreateInfo> qcis;
         for (uint32_t f : fams) {
-            VkDeviceQueueCreateInfo q{}; q.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            q.queueFamilyIndex = f; q.queueCount = 1; q.pQueuePriorities = &pri; qcis.push_back(q);
+            VkDeviceQueueCreateInfo q{};
+            q.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            q.queueFamilyIndex = f;
+            q.queueCount = 1;
+            q.pQueuePriorities = &pri;
+            qcis.push_back(q);
         }
-        VkPhysicalDeviceFeatures feat{}; feat.samplerAnisotropy = VK_TRUE;
-        VkDeviceCreateInfo ci{}; ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        ci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size()); ci.pQueueCreateInfos = qcis.data();
+        VkPhysicalDeviceFeatures feat{};
+        feat.samplerAnisotropy = VK_TRUE;
+        VkDeviceCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        ci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size());
+        ci.pQueueCreateInfos = qcis.data();
         ci.pEnabledFeatures = &feat;
         ci.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
         ci.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
@@ -412,121 +412,192 @@ private:
         vkGetDeviceQueue(device_, queueIndices_.presentFamily.value(), 0, &presentQueue_);
     }
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice_, surface_);
         VkSurfaceFormatKHR fmt = chooseSwapSurfaceFormat(sc.formats);
         VkPresentModeKHR mode = chooseSwapPresentMode(sc.presentModes);
         swapchainExtent_ = chooseSwapExtent(sc.capabilities, window_);
         uint32_t n = sc.capabilities.minImageCount + 1;
-        if (sc.capabilities.maxImageCount > 0) n = std::min(n, sc.capabilities.maxImageCount);
-        VkSwapchainCreateInfoKHR ci{}; ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        ci.surface = surface_; ci.minImageCount = n; ci.imageFormat = fmt.format;
-        ci.imageColorSpace = fmt.colorSpace; ci.imageExtent = swapchainExtent_; ci.imageArrayLayers = 1;
+        if (sc.capabilities.maxImageCount > 0)
+            n = std::min(n, sc.capabilities.maxImageCount);
+        VkSwapchainCreateInfoKHR ci{};
+        ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        ci.surface = surface_;
+        ci.minImageCount = n;
+        ci.imageFormat = fmt.format;
+        ci.imageColorSpace = fmt.colorSpace;
+        ci.imageExtent = swapchainExtent_;
+        ci.imageArrayLayers = 1;
         ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ci.preTransform = sc.capabilities.currentTransform;
-        ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR; ci.presentMode = mode; ci.clipped = VK_TRUE;
+        ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        ci.presentMode = mode;
+        ci.clipped = VK_TRUE;
         VK_CHECK(vkCreateSwapchainKHR(device_, &ci, nullptr, &swapchain_));
         vkGetSwapchainImagesKHR(device_, swapchain_, &n, nullptr);
-        swapchainImages_.resize(n); vkGetSwapchainImagesKHR(device_, swapchain_, &n, swapchainImages_.data());
+        swapchainImages_.resize(n);
+        vkGetSwapchainImagesKHR(device_, swapchain_, &n, swapchainImages_.data());
         swapchainImageFormat_ = fmt.format;
     }
 
-    void createImageViews()
-    {
+    void createImageViews() {
         swapchainImageViews_.resize(swapchainImages_.size());
         for (size_t i = 0; i < swapchainImages_.size(); ++i) {
-            VkImageViewCreateInfo ci{}; ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            ci.image = swapchainImages_[i]; ci.viewType = VK_IMAGE_VIEW_TYPE_2D; ci.format = swapchainImageFormat_;
-            ci.components = {VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY,
-                             VK_COMPONENT_SWIZZLE_IDENTITY,VK_COMPONENT_SWIZZLE_IDENTITY};
+            VkImageViewCreateInfo ci{};
+            ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            ci.image = swapchainImages_[i];
+            ci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            ci.format = swapchainImageFormat_;
+            ci.components = {VK_COMPONENT_SWIZZLE_IDENTITY,
+                             VK_COMPONENT_SWIZZLE_IDENTITY,
+                             VK_COMPONENT_SWIZZLE_IDENTITY,
+                             VK_COMPONENT_SWIZZLE_IDENTITY};
             ci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
             VK_CHECK(vkCreateImageView(device_, &ci, nullptr, &swapchainImageViews_[i]));
         }
     }
 
-    void createRenderPass()
-    {
-        VkAttachmentDescription ca{}; ca.format = swapchainImageFormat_; ca.samples = VK_SAMPLE_COUNT_1_BIT;
-        ca.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; ca.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        ca.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; ca.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        ca.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; ca.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        VkAttachmentReference cr{}; cr.attachment = 0; cr.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        VkSubpassDescription sp{}; sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        sp.colorAttachmentCount = 1; sp.pColorAttachments = &cr;
-        VkSubpassDependency dep{}; dep.srcSubpass = VK_SUBPASS_EXTERNAL; dep.dstSubpass = 0;
+    void createRenderPass() {
+        VkAttachmentDescription ca{};
+        ca.format = swapchainImageFormat_;
+        ca.samples = VK_SAMPLE_COUNT_1_BIT;
+        ca.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        ca.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        ca.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        ca.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        ca.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        ca.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentReference cr{};
+        cr.attachment = 0;
+        cr.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        VkSubpassDescription sp{};
+        sp.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        sp.colorAttachmentCount = 1;
+        sp.pColorAttachments = &cr;
+        VkSubpassDependency dep{};
+        dep.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dep.dstSubpass = 0;
         dep.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dep.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dep.srcAccessMask = 0; dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        VkRenderPassCreateInfo rpi{}; rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        rpi.attachmentCount = 1; rpi.pAttachments = &ca; rpi.subpassCount = 1; rpi.pSubpasses = &sp;
-        rpi.dependencyCount = 1; rpi.pDependencies = &dep;
+        dep.srcAccessMask = 0;
+        dep.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        VkRenderPassCreateInfo rpi{};
+        rpi.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        rpi.attachmentCount = 1;
+        rpi.pAttachments = &ca;
+        rpi.subpassCount = 1;
+        rpi.pSubpasses = &sp;
+        rpi.dependencyCount = 1;
+        rpi.pDependencies = &dep;
         VK_CHECK(vkCreateRenderPass(device_, &rpi, nullptr, &renderPass_));
     }
 
-    void createGraphicsPipeline()
-    {
+    void createGraphicsPipeline() {
         // triangle.vert: 顶点坐标硬编码在着色器内（无顶点缓冲输入）
         // triangle.frag: 输出光栅化插值得到的颜色
         VkShaderModule vert = createShaderModuleFromFile(device_, "triangle.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "triangle.frag.spv");
         VkPipelineShaderStageCreateInfo stages[2]{};
-        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_VERTEX_BIT,vert,"main",nullptr};
-        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,nullptr,0,VK_SHADER_STAGE_FRAGMENT_BIT,frag,"main",nullptr};
-        VkPipelineVertexInputStateCreateInfo vi{}; vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,nullptr,0,VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,VK_FALSE};
-        VkPipelineViewportStateCreateInfo vs{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,nullptr,0,1,nullptr,1,nullptr};
-        VkPipelineRasterizationStateCreateInfo rs{}; rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        rs.polygonMode = VK_POLYGON_MODE_FILL; rs.lineWidth = 1.0f; rs.cullMode = VK_CULL_MODE_BACK_BIT; rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-        VkPipelineMultisampleStateCreateInfo ms{}; ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO; ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        VkPipelineColorBlendAttachmentState cba{}; cba.colorWriteMask = 0xf;
-        VkPipelineColorBlendStateCreateInfo cb{}; cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO; cb.attachmentCount = 1; cb.pAttachments = &cba;
+        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_VERTEX_BIT,
+                     vert,
+                     "main",
+                     nullptr};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr,
+                     0,
+                     VK_SHADER_STAGE_FRAGMENT_BIT,
+                     frag,
+                     "main",
+                     nullptr};
+        VkPipelineVertexInputStateCreateInfo vi{};
+        vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                  nullptr,
+                                                  0,
+                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                                  VK_FALSE};
+        VkPipelineViewportStateCreateInfo vs{
+            VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr};
+        VkPipelineRasterizationStateCreateInfo rs{};
+        rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rs.polygonMode = VK_POLYGON_MODE_FILL;
+        rs.lineWidth = 1.0f;
+        rs.cullMode = VK_CULL_MODE_BACK_BIT;
+        rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        VkPipelineMultisampleStateCreateInfo ms{};
+        ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        VkPipelineColorBlendAttachmentState cba{};
+        cba.colorWriteMask = 0xf;
+        VkPipelineColorBlendStateCreateInfo cb{};
+        cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        cb.attachmentCount = 1;
+        cb.pAttachments = &cba;
         std::vector<VkDynamicState> dyn = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        VkPipelineDynamicStateCreateInfo ds{}; ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        ds.dynamicStateCount = static_cast<uint32_t>(dyn.size()); ds.pDynamicStates = dyn.data();
-        VkPipelineLayoutCreateInfo pli{}; pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        VkPipelineDynamicStateCreateInfo ds{};
+        ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        ds.dynamicStateCount = static_cast<uint32_t>(dyn.size());
+        ds.pDynamicStates = dyn.data();
+        VkPipelineLayoutCreateInfo pli{};
+        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         VK_CHECK(vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout_));
-        VkGraphicsPipelineCreateInfo pi{}; pi.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pi.stageCount = 2; pi.pStages = stages;
-        pi.pVertexInputState = &vi; pi.pInputAssemblyState = &ia; pi.pViewportState = &vs;
-        pi.pRasterizationState = &rs; pi.pMultisampleState = &ms; pi.pColorBlendState = &cb;
-        pi.pDynamicState = &ds; pi.layout = pipelineLayout_; pi.renderPass = renderPass_;
+        VkGraphicsPipelineCreateInfo pi{};
+        pi.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pi.stageCount = 2;
+        pi.pStages = stages;
+        pi.pVertexInputState = &vi;
+        pi.pInputAssemblyState = &ia;
+        pi.pViewportState = &vs;
+        pi.pRasterizationState = &rs;
+        pi.pMultisampleState = &ms;
+        pi.pColorBlendState = &cb;
+        pi.pDynamicState = &ds;
+        pi.layout = pipelineLayout_;
+        pi.renderPass = renderPass_;
         VK_CHECK(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pi, nullptr, &pipeline_));
-        vkDestroyShaderModule(device_, frag, nullptr); vkDestroyShaderModule(device_, vert, nullptr);
+        vkDestroyShaderModule(device_, frag, nullptr);
+        vkDestroyShaderModule(device_, vert, nullptr);
     }
 
-    void createFramebuffers()
-    {
+    void createFramebuffers() {
         framebuffers_.resize(swapchainImageViews_.size());
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
             VkImageView att[] = {swapchainImageViews_[i]};
-            VkFramebufferCreateInfo ci{}; ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            ci.renderPass = renderPass_; ci.attachmentCount = 1; ci.pAttachments = att;
-            ci.width = swapchainExtent_.width; ci.height = swapchainExtent_.height; ci.layers = 1;
+            VkFramebufferCreateInfo ci{};
+            ci.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            ci.renderPass = renderPass_;
+            ci.attachmentCount = 1;
+            ci.pAttachments = att;
+            ci.width = swapchainExtent_.width;
+            ci.height = swapchainExtent_.height;
+            ci.layers = 1;
             VK_CHECK(vkCreateFramebuffer(device_, &ci, nullptr, &framebuffers_[i]));
         }
     }
 
-    void createCommandPool()
-    {
-        VkCommandPoolCreateInfo ci{}; ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    void createCommandPool() {
+        VkCommandPoolCreateInfo ci{};
+        ci.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         ci.queueFamilyIndex = queueIndices_.graphicsFamily.value();
         VK_CHECK(vkCreateCommandPool(device_, &ci, nullptr, &commandPool_));
     }
 
-    void createCommandBuffers()
-    {
+    void createCommandBuffers() {
         commandBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
-        VkCommandBufferAllocateInfo ai{}; ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        ai.commandPool = commandPool_; ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        VkCommandBufferAllocateInfo ai{};
+        ai.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        ai.commandPool = commandPool_;
+        ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         ai.commandBufferCount = static_cast<uint32_t>(commandBuffers_.size());
         VK_CHECK(vkAllocateCommandBuffers(device_, &ai, commandBuffers_.data()));
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         cleanupSwapchain();
         vkDestroyPipeline(device_, pipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
@@ -539,20 +610,22 @@ private:
         vkDestroyDevice(device_, nullptr);
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
         vkDestroyInstance(instance_, nullptr);
-        glfwDestroyWindow(window_); glfwTerminate();
+        glfwDestroyWindow(window_);
+        glfwTerminate();
         std::cout << "✅ 清理完成。\n";
     }
 };
 
-
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════════════════\n";
     std::cout << " 第08章：完整渲染循环 ★ 彩色三角形 ★\n";
     std::cout << "═══════════════════════════════════════════════════\n\n";
     Ch08App app;
-    try { app.run(); } catch (const std::exception& e) {
-        std::cerr << "❌ 错误：" << e.what() << "\n"; return 1;
+    try {
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << "❌ 错误：" << e.what() << "\n";
+        return 1;
     }
     return 0;
 }

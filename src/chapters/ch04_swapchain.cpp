@@ -53,68 +53,68 @@
 #include <set>
 #include <stdexcept>
 
-constexpr uint32_t WIDTH  = 800;
+constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
 class Ch04App {
-public:
-    void run()
-    {
+  public:
+    void run() {
         initWindow();
         initVulkan();
         mainLoop();
         cleanup();
     }
 
-private:
-    GLFWwindow*      window_         = nullptr;
-    VkInstance       instance_       = VK_NULL_HANDLE;
-    VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
+  private:
+    GLFWwindow* window_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice         device_         = VK_NULL_HANDLE;
-    VkQueue          graphicsQueue_  = VK_NULL_HANDLE;
-    VkQueue          presentQueue_   = VK_NULL_HANDLE;
-    VkSwapchainKHR   swapchain_      = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
 
-    std::vector<VkImage>     swapchainImages_;
-    VkFormat                 swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
-    VkExtent2D               swapchainExtent_{};
+    std::vector<VkImage> swapchainImages_;
+    VkFormat swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapchainExtent_{};
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);   // 不创建 OpenGL 上下文
-        glfwWindowHint(GLFW_RESIZABLE,  GLFW_FALSE);    // 暂时禁止窗口缩放
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); // 不创建 OpenGL 上下文
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);   // 暂时禁止窗口缩放
         window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch04 - Swap Chain", nullptr, nullptr);
         std::cout << "✅ 窗口已创建 " << WIDTH << "x" << HEIGHT << "\n";
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         createInstance();
-        createSurface();       // Surface 必须在选择物理设备之前创建！
+        createSurface(); // Surface 必须在选择物理设备之前创建！
         pickPhysicalDevice();
         createLogicalDevice();
         createSwapchain();
     }
 
-    void createInstance()
-    {
+    void createInstance() {
         VkApplicationInfo appInfo{};
-        appInfo.sType      = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
         auto exts = getRequiredInstanceExtensions();
 
         VkInstanceCreateInfo ci{};
-        ci.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        ci.pApplicationInfo        = &appInfo;
-        ci.enabledExtensionCount   = static_cast<uint32_t>(exts.size());
+        ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        ci.pApplicationInfo = &appInfo;
+        ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
-        ci.flags                  |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#ifdef __APPLE__
+#ifdef __APPLE__
+        ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
+#endif
         if (ENABLE_VALIDATION_LAYERS) {
-            ci.enabledLayerCount   = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+            ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
         }
         VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
@@ -122,8 +122,7 @@ private:
 
     // ─── 创建 Surface ─────────────────────────────────────────────────────────
 
-    void createSurface()
-    {
+    void createSurface() {
         // GLFW 封装了跨平台 Surface 创建：
         //   macOS → VK_MVK_macos_surface / VK_EXT_metal_surface
         //   Windows → VK_KHR_win32_surface
@@ -132,8 +131,7 @@ private:
         std::cout << "✅ VkSurfaceKHR 创建成功！\n";
     }
 
-    void pickPhysicalDevice()
-    {
+    void pickPhysicalDevice() {
         uint32_t count = 0;
         vkEnumeratePhysicalDevices(instance_, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
@@ -153,8 +151,7 @@ private:
         std::cout << "✅ 选择设备：" << props.deviceName << "\n";
     }
 
-    bool isDeviceSuitable(VkPhysicalDevice device)
-    {
+    bool isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device, surface_);
         bool extsOk = checkDeviceExtensionSupport(device);
 
@@ -166,21 +163,17 @@ private:
         return indices.isComplete() && extsOk && swapchainOk;
     }
 
-    void createLogicalDevice()
-    {
+    void createLogicalDevice() {
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice_, surface_);
-        std::set<uint32_t> uniqueFamilies = {
-            indices.graphicsFamily.value(),
-            indices.presentFamily.value()
-        };
+        std::set<uint32_t> uniqueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         const float priority = 1.0f;
         std::vector<VkDeviceQueueCreateInfo> qcis;
         for (uint32_t family : uniqueFamilies) {
             VkDeviceQueueCreateInfo qci{};
-            qci.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            qci.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             qci.queueFamilyIndex = family;
-            qci.queueCount       = 1;
+            qci.queueCount = 1;
             qci.pQueuePriorities = &priority;
             qcis.push_back(qci);
         }
@@ -189,33 +182,32 @@ private:
         features.samplerAnisotropy = VK_TRUE;
 
         VkDeviceCreateInfo ci{};
-        ci.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        ci.queueCreateInfoCount    = static_cast<uint32_t>(qcis.size());
-        ci.pQueueCreateInfos       = qcis.data();
-        ci.pEnabledFeatures        = &features;
-        ci.enabledExtensionCount   = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
+        ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        ci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size());
+        ci.pQueueCreateInfos = qcis.data();
+        ci.pEnabledFeatures = &features;
+        ci.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
         ci.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
 
         if (ENABLE_VALIDATION_LAYERS) {
-            ci.enabledLayerCount   = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+            ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
         }
         VK_CHECK(vkCreateDevice(physicalDevice_, &ci, nullptr, &device_));
 
         vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
-        vkGetDeviceQueue(device_, indices.presentFamily.value(),  0, &presentQueue_);
+        vkGetDeviceQueue(device_, indices.presentFamily.value(), 0, &presentQueue_);
         std::cout << "✅ 逻辑设备创建成功！\n";
     }
 
     // ─── 创建交换链（核心！） ──────────────────────────────────────────────────
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice_, surface_);
 
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(sc.formats);
-        VkPresentModeKHR   presentMode   = chooseSwapPresentMode(sc.presentModes);
-        VkExtent2D         extent        = chooseSwapExtent(sc.capabilities, window_);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(sc.presentModes);
+        VkExtent2D extent = chooseSwapExtent(sc.capabilities, window_);
 
         // 交换链图像数量：比最小数量多1（实现三缓冲）
         uint32_t imageCount = sc.capabilities.minImageCount + 1;
@@ -223,38 +215,35 @@ private:
             imageCount = std::min(imageCount, sc.capabilities.maxImageCount);
 
         VkSwapchainCreateInfoKHR ci{};
-        ci.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        ci.surface          = surface_;
-        ci.minImageCount    = imageCount;
-        ci.imageFormat      = surfaceFormat.format;
-        ci.imageColorSpace  = surfaceFormat.colorSpace;
-        ci.imageExtent      = extent;
-        ci.imageArrayLayers = 1;                              // 非 VR 应用始终为 1
-        ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;  // 作为颜色附件
+        ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        ci.surface = surface_;
+        ci.minImageCount = imageCount;
+        ci.imageFormat = surfaceFormat.format;
+        ci.imageColorSpace = surfaceFormat.colorSpace;
+        ci.imageExtent = extent;
+        ci.imageArrayLayers = 1;                             // 非 VR 应用始终为 1
+        ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; // 作为颜色附件
 
         QueueFamilyIndices indices = findQueueFamilies(physicalDevice_, surface_);
-        uint32_t queueFamilyIndices[] = {
-            indices.graphicsFamily.value(),
-            indices.presentFamily.value()
-        };
+        uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
         if (indices.graphicsFamily != indices.presentFamily) {
             // 不同队列族：使用并发模式（性能较低，但实现简单）
-            ci.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
+            ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
             ci.queueFamilyIndexCount = 2;
-            ci.pQueueFamilyIndices   = queueFamilyIndices;
+            ci.pQueueFamilyIndices = queueFamilyIndices;
         } else {
             // 同一队列族：使用独占模式（最高性能）
             ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
         }
 
         // 图像变换（如旋转90度）：使用当前变换（不额外旋转）
-        ci.preTransform   = sc.capabilities.currentTransform;
+        ci.preTransform = sc.capabilities.currentTransform;
         // 与其他窗口合成时是否使用 Alpha 通道（通常忽略）
         ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        ci.presentMode    = presentMode;
-        ci.clipped        = VK_TRUE;   // 裁剪被其他窗口遮挡的像素，提升性能
-        ci.oldSwapchain   = VK_NULL_HANDLE;  // 窗口大小改变时需要重建交换链
+        ci.presentMode = presentMode;
+        ci.clipped = VK_TRUE;             // 裁剪被其他窗口遮挡的像素，提升性能
+        ci.oldSwapchain = VK_NULL_HANDLE; // 窗口大小改变时需要重建交换链
 
         VK_CHECK(vkCreateSwapchainKHR(device_, &ci, nullptr, &swapchain_));
 
@@ -264,19 +253,17 @@ private:
         vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, swapchainImages_.data());
 
         swapchainImageFormat_ = surfaceFormat.format;
-        swapchainExtent_      = extent;
+        swapchainExtent_ = extent;
 
         std::cout << "✅ 交换链创建成功！\n";
         std::cout << "   图像数量：" << imageCount << "\n";
         std::cout << "   图像格式：" << surfaceFormat.format << "\n";
         std::cout << "   分辨率  ：" << extent.width << "x" << extent.height << "\n";
-        std::cout << "   呈现模式：" << (presentMode == VK_PRESENT_MODE_MAILBOX_KHR
-                                          ? "Mailbox (三缓冲)"
-                                          : "FIFO (垂直同步)") << "\n";
+        std::cout << "   呈现模式："
+                  << (presentMode == VK_PRESENT_MODE_MAILBOX_KHR ? "Mailbox (三缓冲)" : "FIFO (垂直同步)") << "\n";
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         std::cout << "\n🎮 窗口已打开，按 ESC 或关闭窗口退出...\n";
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
@@ -285,8 +272,7 @@ private:
         }
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         vkDestroyDevice(device_, nullptr);
         vkDestroySurfaceKHR(instance_, surface_, nullptr);
@@ -297,8 +283,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════\n";
     std::cout << " 第04章：窗口表面与交换链\n";
     std::cout << "═══════════════════════════════════════\n\n";

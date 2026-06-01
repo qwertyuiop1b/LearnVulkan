@@ -37,36 +37,35 @@
 #include <algorithm>
 #include <iostream>
 
-static constexpr int CLUSTER_X      = 16;
-static constexpr int CLUSTER_Y      = 9;
-static constexpr int CLUSTER_Z      = 24;
+static constexpr int CLUSTER_X = 16;
+static constexpr int CLUSTER_Y = 9;
+static constexpr int CLUSTER_Z = 24;
 static constexpr int TOTAL_CLUSTERS = CLUSTER_X * CLUSTER_Y * CLUSTER_Z;
 
 class Ch76App : public DemoApp {
-protected:
-    void onInit() override
-    {
+  protected:
+    void onInit() override {
         bgColor_ = {0.05f, 0.06f, 0.10f};
         rebuildLightStats();
     }
 
-    void onUpdate() override
-    {
+    void onUpdate() override {
         frameTime_ += 0.016f;
         if (isAnimating_) {
             rebuildLightStats();
         }
     }
 
-    void buildUi() override
-    {
+    void buildUi() override {
         interactive_.buildDebugPanel("第76章：聚簇前向着色");
         ImGui::Separator();
 
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(940, 680), ImGuiCond_FirstUseEver);
-        if (!ImGui::Begin("第76章：聚簇前向着色（Clustered Forward Shading）", nullptr))
-        { ImGui::End(); return; }
+        if (!ImGui::Begin("第76章：聚簇前向着色（Clustered Forward Shading）", nullptr)) {
+            ImGui::End();
+            return;
+        }
 
         if (ImGui::BeginTabBar("ClusteredTabs")) {
 
@@ -83,53 +82,64 @@ protected:
                     const char* notes;
                 };
                 std::array<TechEntry, 4> techs = {{
-                    {"传统前向",     "O(N×M)",    "无",      "8-16",    "最简单，光源极少"},
-                    {"延迟着色",     "O(N+M)",    "无",      "1000+",   "不支持透明，MSAA 难"},
-                    {"Tiled Forward","O(N×T)",    "无分割",  "100-200", "深度穿透问题"},
-                    {"Clustered",    "O(N×C)",    "对数分割","200-1000","现代主流方案"},
+                    {"传统前向", "O(N×M)", "无", "8-16", "最简单，光源极少"},
+                    {"延迟着色", "O(N+M)", "无", "1000+", "不支持透明，MSAA 难"},
+                    {"Tiled Forward", "O(N×T)", "无分割", "100-200", "深度穿透问题"},
+                    {"Clustered", "O(N×C)", "对数分割", "200-1000", "现代主流方案"},
                 }};
 
                 ImGui::Columns(5, "techCols");
-                ImGui::Text("技术");       ImGui::NextColumn();
-                ImGui::Text("复杂度");     ImGui::NextColumn();
-                ImGui::Text("深度处理");   ImGui::NextColumn();
-                ImGui::Text("推荐光源数"); ImGui::NextColumn();
-                ImGui::Text("备注");       ImGui::NextColumn();
+                ImGui::Text("技术");
+                ImGui::NextColumn();
+                ImGui::Text("复杂度");
+                ImGui::NextColumn();
+                ImGui::Text("深度处理");
+                ImGui::NextColumn();
+                ImGui::Text("推荐光源数");
+                ImGui::NextColumn();
+                ImGui::Text("备注");
+                ImGui::NextColumn();
                 ImGui::Separator();
                 for (int ti = 0; ti < static_cast<int>(techs.size()); ++ti) {
                     auto& t = techs[ti];
                     bool highlight = (ti == 3);
-                    if (highlight) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f,1,0.5f,1));
-                    ImGui::Text("%s", t.name);         ImGui::NextColumn();
-                    ImGui::Text("%s", t.complexity);   ImGui::NextColumn();
-                    ImGui::Text("%s", t.depthHandling);ImGui::NextColumn();
-                    ImGui::Text("%s", t.maxLights);    ImGui::NextColumn();
-                    ImGui::Text("%s", t.notes);        ImGui::NextColumn();
-                    if (highlight) ImGui::PopStyleColor();
+                    if (highlight)
+                        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4f, 1, 0.5f, 1));
+                    ImGui::Text("%s", t.name);
+                    ImGui::NextColumn();
+                    ImGui::Text("%s", t.complexity);
+                    ImGui::NextColumn();
+                    ImGui::Text("%s", t.depthHandling);
+                    ImGui::NextColumn();
+                    ImGui::Text("%s", t.maxLights);
+                    ImGui::NextColumn();
+                    ImGui::Text("%s", t.notes);
+                    ImGui::NextColumn();
+                    if (highlight)
+                        ImGui::PopStyleColor();
                 }
                 ImGui::Columns(1);
                 ImGui::Spacing();
 
-                ImGui::TextColored(ImVec4(0.4f,0.8f,1,1), "Cluster 索引计算：");
-                ImGui::TextWrapped(
-                    "// 从片元坐标计算所属 cluster：\n"
-                    "uint clusterX = uint(gl_FragCoord.x / tileSize.x);\n"
-                    "uint clusterY = uint(gl_FragCoord.y / tileSize.y);\n\n"
-                    "// 深度层（对数分布，near/far 间均匀分割 log 空间）：\n"
-                    "float logFarNear = log2(zFar / zNear);\n"
-                    "uint clusterZ = uint(log2(linearDepth / zNear)\n"
-                    "                * NUM_DEPTH_SLICES / logFarNear);\n\n"
-                    "uint clusterIdx = clusterX\n"
-                    "    + clusterY * CLUSTER_X\n"
-                    "    + clusterZ * CLUSTER_X * CLUSTER_Y;\n\n"
-                    "// 查找光源列表：\n"
-                    "uint lightStart = clusterLightList[clusterIdx].offset;\n"
-                    "uint lightCount = clusterLightList[clusterIdx].count;\n"
-                    "for (uint i = 0; i < lightCount; ++i) {\n"
-                    "    uint lightIdx = lightIndices[lightStart + i];\n"
-                    "    // 计算该光源的贡献\n"
-                    "    result += calcLight(lights[lightIdx]);\n"
-                    "}");
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1, 1), "Cluster 索引计算：");
+                ImGui::TextWrapped("// 从片元坐标计算所属 cluster：\n"
+                                   "uint clusterX = uint(gl_FragCoord.x / tileSize.x);\n"
+                                   "uint clusterY = uint(gl_FragCoord.y / tileSize.y);\n\n"
+                                   "// 深度层（对数分布，near/far 间均匀分割 log 空间）：\n"
+                                   "float logFarNear = log2(zFar / zNear);\n"
+                                   "uint clusterZ = uint(log2(linearDepth / zNear)\n"
+                                   "                * NUM_DEPTH_SLICES / logFarNear);\n\n"
+                                   "uint clusterIdx = clusterX\n"
+                                   "    + clusterY * CLUSTER_X\n"
+                                   "    + clusterZ * CLUSTER_X * CLUSTER_Y;\n\n"
+                                   "// 查找光源列表：\n"
+                                   "uint lightStart = clusterLightList[clusterIdx].offset;\n"
+                                   "uint lightCount = clusterLightList[clusterIdx].count;\n"
+                                   "for (uint i = 0; i < lightCount; ++i) {\n"
+                                   "    uint lightIdx = lightIndices[lightStart + i];\n"
+                                   "    // 计算该光源的贡献\n"
+                                   "    result += calcLight(lights[lightIdx]);\n"
+                                   "}");
                 ImGui::EndTabItem();
             }
 
@@ -145,23 +155,32 @@ protected:
                 ImGui::Text("总 Cluster 数: %d", TOTAL_CLUSTERS);
                 ImGui::Spacing();
 
-                ImGui::TextColored(ImVec4(0.4f,0.8f,1,1), "深度层分布（对数，Near=0.1m, Far=1000m）：");
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1, 1), "深度层分布（对数，Near=0.1m, Far=1000m）：");
                 ImGui::Columns(3, "depthCols");
-                ImGui::Text("层级"); ImGui::NextColumn();
-                ImGui::Text("近边界"); ImGui::NextColumn();
-                ImGui::Text("远边界"); ImGui::NextColumn();
+                ImGui::Text("层级");
+                ImGui::NextColumn();
+                ImGui::Text("近边界");
+                ImGui::NextColumn();
+                ImGui::Text("远边界");
+                ImGui::NextColumn();
                 ImGui::Separator();
                 const float zNear = 0.1f, zFar = 1000.0f;
                 for (int z = 0; z < CLUSTER_Z; z += 4) {
-                    float near = zNear * std::pow(zFar/zNear, float(z) / CLUSTER_Z);
-                    float far  = zNear * std::pow(zFar/zNear, float(z+1) / CLUSTER_Z);
-                    ImGui::Text("Slice %2d", z);  ImGui::NextColumn();
-                    ImGui::Text("%.1f m", near);   ImGui::NextColumn();
-                    ImGui::Text("%.1f m", far);    ImGui::NextColumn();
+                    float near = zNear * std::pow(zFar / zNear, float(z) / CLUSTER_Z);
+                    float far = zNear * std::pow(zFar / zNear, float(z + 1) / CLUSTER_Z);
+                    ImGui::Text("Slice %2d", z);
+                    ImGui::NextColumn();
+                    ImGui::Text("%.1f m", near);
+                    ImGui::NextColumn();
+                    ImGui::Text("%.1f m", far);
+                    ImGui::NextColumn();
                 }
-                ImGui::Text("...");  ImGui::NextColumn();
-                ImGui::Text("...");  ImGui::NextColumn();
-                ImGui::Text("...");  ImGui::NextColumn();
+                ImGui::Text("...");
+                ImGui::NextColumn();
+                ImGui::Text("...");
+                ImGui::NextColumn();
+                ImGui::Text("...");
+                ImGui::NextColumn();
                 ImGui::Columns(1);
                 ImGui::EndTabItem();
             }
@@ -170,29 +189,28 @@ protected:
             if (ImGui::BeginTabItem("Compute 光源分配")) {
                 ImGui::TextColored(ImVec4(1, 0.85f, 0.2f, 1), "Compute Shader 光源分配算法");
                 ImGui::Separator();
-                ImGui::TextWrapped(
-                    "// Compute Shader：cluster_assign.comp\n"
-                    "// 每个工作组处理一个 cluster\n"
-                    "layout(local_size_x=1, local_size_y=1, local_size_z=1) in;\n\n"
-                    "void main() {\n"
-                    "    uint idx = gl_GlobalInvocationID.x;\n"
-                    "    if (idx >= TOTAL_CLUSTERS) return;\n\n"
-                    "    // 从 cluster 索引计算 3D 位置\n"
-                    "    uint z = idx / (CLUSTER_X * CLUSTER_Y);\n"
-                    "    uint y = (idx %% (CLUSTER_X * CLUSTER_Y)) / CLUSTER_X;\n"
-                    "    uint x = idx %% CLUSTER_X;\n\n"
-                    "    // 计算 cluster 的 AABB（视锥体子空间）\n"
-                    "    AABB clusterAABB = computeClusterAABB(x, y, z);\n\n"
-                    "    // 测试每个点光源的球 vs cluster AABB\n"
-                    "    uint lightCount = 0;\n"
-                    "    for (uint i = 0; i < numLights; ++i) {\n"
-                    "        if (sphereAABBIntersect(lights[i].pos, lights[i].radius,\n"
-                    "                               clusterAABB)) {\n"
-                    "            lightList[idx * MAX_LIGHTS + lightCount++] = i;\n"
-                    "        }\n"
-                    "    }\n"
-                    "    lightCounts[idx] = lightCount;\n"
-                    "}");
+                ImGui::TextWrapped("// Compute Shader：cluster_assign.comp\n"
+                                   "// 每个工作组处理一个 cluster\n"
+                                   "layout(local_size_x=1, local_size_y=1, local_size_z=1) in;\n\n"
+                                   "void main() {\n"
+                                   "    uint idx = gl_GlobalInvocationID.x;\n"
+                                   "    if (idx >= TOTAL_CLUSTERS) return;\n\n"
+                                   "    // 从 cluster 索引计算 3D 位置\n"
+                                   "    uint z = idx / (CLUSTER_X * CLUSTER_Y);\n"
+                                   "    uint y = (idx %% (CLUSTER_X * CLUSTER_Y)) / CLUSTER_X;\n"
+                                   "    uint x = idx %% CLUSTER_X;\n\n"
+                                   "    // 计算 cluster 的 AABB（视锥体子空间）\n"
+                                   "    AABB clusterAABB = computeClusterAABB(x, y, z);\n\n"
+                                   "    // 测试每个点光源的球 vs cluster AABB\n"
+                                   "    uint lightCount = 0;\n"
+                                   "    for (uint i = 0; i < numLights; ++i) {\n"
+                                   "        if (sphereAABBIntersect(lights[i].pos, lights[i].radius,\n"
+                                   "                               clusterAABB)) {\n"
+                                   "            lightList[idx * MAX_LIGHTS + lightCount++] = i;\n"
+                                   "        }\n"
+                                   "    }\n"
+                                   "    lightCounts[idx] = lightCount;\n"
+                                   "}");
                 ImGui::EndTabItem();
             }
 
@@ -204,38 +222,34 @@ protected:
                 bool changed = false;
                 changed |= ImGui::SliderInt("总光源数", &numLights_, 10, 200);
                 ImGui::Checkbox("动态更新", &isAnimating_);
-                if (changed) rebuildLightStats();
+                if (changed)
+                    rebuildLightStats();
                 ImGui::Spacing();
 
-                ImGui::Text("总光源数          : %d",    numLights_);
-                ImGui::Text("活跃 Cluster 数   : %d / %d",   activeClusters_, TOTAL_CLUSTERS);
+                ImGui::Text("总光源数          : %d", numLights_);
+                ImGui::Text("活跃 Cluster 数   : %d / %d", activeClusters_, TOTAL_CLUSTERS);
                 ImGui::Text("每 Cluster 平均   : %.1f 光源", avgLightsPerCluster_);
-                ImGui::Text("最大光源数 Cluster: %d 光源",   maxLightsInCluster_);
-                ImGui::Text("空 Cluster 数     : %d",        emptyClusters_);
-                ImGui::Text("Compute 耗时估算  : ~%.2f ms",
-                    numLights_ * TOTAL_CLUSTERS * 0.000003f);
+                ImGui::Text("最大光源数 Cluster: %d 光源", maxLightsInCluster_);
+                ImGui::Text("空 Cluster 数     : %d", emptyClusters_);
+                ImGui::Text("Compute 耗时估算  : ~%.2f ms", numLights_ * TOTAL_CLUSTERS * 0.000003f);
                 ImGui::Spacing();
 
-                ImGui::TextColored(ImVec4(0.4f,0.8f,1,1), "光源分布直方图（每Cluster光源数）：");
+                ImGui::TextColored(ImVec4(0.4f, 0.8f, 1, 1), "光源分布直方图（每Cluster光源数）：");
                 ImGui::Text("0 光源：");
                 ImGui::SameLine();
-                ImGui::ProgressBar(float(emptyClusters_) / TOTAL_CLUSTERS,
-                    ImVec2(300, 14));
+                ImGui::ProgressBar(float(emptyClusters_) / TOTAL_CLUSTERS, ImVec2(300, 14));
 
                 ImGui::Text("1-2光源：");
                 ImGui::SameLine();
-                ImGui::ProgressBar(float(lowLightClusters_) / TOTAL_CLUSTERS,
-                    ImVec2(300, 14));
+                ImGui::ProgressBar(float(lowLightClusters_) / TOTAL_CLUSTERS, ImVec2(300, 14));
 
                 ImGui::Text("3-8光源：");
                 ImGui::SameLine();
-                ImGui::ProgressBar(float(midLightClusters_) / TOTAL_CLUSTERS,
-                    ImVec2(300, 14));
+                ImGui::ProgressBar(float(midLightClusters_) / TOTAL_CLUSTERS, ImVec2(300, 14));
 
                 ImGui::Text("8+光源：");
                 ImGui::SameLine();
-                ImGui::ProgressBar(float(highLightClusters_) / TOTAL_CLUSTERS,
-                    ImVec2(300, 14));
+                ImGui::ProgressBar(float(highLightClusters_) / TOTAL_CLUSTERS, ImVec2(300, 14));
                 ImGui::EndTabItem();
             }
 
@@ -244,58 +258,61 @@ protected:
         ImGui::End();
     }
 
-private:
-    int   numLights_          = 50;
-    bool  isAnimating_        = false;
-    float frameTime_          = 0.0f;
-    int   activeClusters_     = 0;
+  private:
+    int numLights_ = 50;
+    bool isAnimating_ = false;
+    float frameTime_ = 0.0f;
+    int activeClusters_ = 0;
     float avgLightsPerCluster_ = 0.0f;
-    int   maxLightsInCluster_ = 0;
-    int   emptyClusters_      = 0;
-    int   lowLightClusters_   = 0;
-    int   midLightClusters_   = 0;
-    int   highLightClusters_  = 0;
+    int maxLightsInCluster_ = 0;
+    int emptyClusters_ = 0;
+    int lowLightClusters_ = 0;
+    int midLightClusters_ = 0;
+    int highLightClusters_ = 0;
 
-    void rebuildLightStats()
-    {
+    void rebuildLightStats() {
         std::mt19937 rng(static_cast<uint32_t>(frameTime_ * 10));
         std::uniform_int_distribution<int> clusterDist(0, TOTAL_CLUSTERS - 1);
         std::uniform_real_distribution<float> radiusDist(0.1f, 0.4f);
 
         std::vector<int> clusterLightCount(TOTAL_CLUSTERS, 0);
         for (int i = 0; i < numLights_; ++i) {
-            float radius    = radiusDist(rng);
-            int   numHits   = static_cast<int>(radius * TOTAL_CLUSTERS * 0.02f) + 1;
+            float radius = radiusDist(rng);
+            int numHits = static_cast<int>(radius * TOTAL_CLUSTERS * 0.02f) + 1;
             for (int h = 0; h < numHits; ++h) {
                 int c = clusterDist(rng);
                 clusterLightCount[c]++;
             }
         }
 
-        activeClusters_    = 0;
+        activeClusters_ = 0;
         maxLightsInCluster_ = 0;
-        emptyClusters_     = 0;
-        lowLightClusters_  = 0;
-        midLightClusters_  = 0;
+        emptyClusters_ = 0;
+        lowLightClusters_ = 0;
+        midLightClusters_ = 0;
         highLightClusters_ = 0;
-        int totalAssigned  = 0;
+        int totalAssigned = 0;
 
         for (int c : clusterLightCount) {
-            if (c == 0) { ++emptyClusters_; continue; }
+            if (c == 0) {
+                ++emptyClusters_;
+                continue;
+            }
             ++activeClusters_;
             totalAssigned += c;
             maxLightsInCluster_ = std::max(maxLightsInCluster_, c);
-            if (c <= 2)      ++lowLightClusters_;
-            else if (c <= 8) ++midLightClusters_;
-            else             ++highLightClusters_;
+            if (c <= 2)
+                ++lowLightClusters_;
+            else if (c <= 8)
+                ++midLightClusters_;
+            else
+                ++highLightClusters_;
         }
-        avgLightsPerCluster_ = activeClusters_ > 0
-            ? float(totalAssigned) / activeClusters_ : 0.0f;
+        avgLightsPerCluster_ = activeClusters_ > 0 ? float(totalAssigned) / activeClusters_ : 0.0f;
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════════\n";
     std::cout << " 第76章：聚簇前向着色（Clustered Forward Shading）\n";
     std::cout << " 高级渲染技术系列 — ch76/10\n";

@@ -24,27 +24,43 @@
 
 using namespace vulkan_tutorial;
 
-constexpr uint32_t WIDTH          = 800;
-constexpr uint32_t HEIGHT         = 600;
-constexpr int      MAX_FRAMES     = 2;
-constexpr uint32_t SHADOW_DIM     = 1024;
-constexpr uint32_t CASCADE_COUNT  = 3;
+constexpr uint32_t WIDTH = 800;
+constexpr uint32_t HEIGHT = 600;
+constexpr int MAX_FRAMES = 2;
+constexpr uint32_t SHADOW_DIM = 1024;
+constexpr uint32_t CASCADE_COUNT = 3;
 
-struct Vertex { glm::vec3 pos; glm::vec3 normal; glm::vec3 color; };
+struct Vertex {
+    glm::vec3 pos;
+    glm::vec3 normal;
+    glm::vec3 color;
+};
 
 static const std::vector<Vertex> SCENE = {
-    {{-4,-0.5f,-4},{0,1,0},{0.45f,0.45f,0.5f}}, {{4,-0.5f,-4},{0,1,0},{0.45f,0.45f,0.5f}},
-    {{4,-0.5f,4},{0,1,0},{0.45f,0.45f,0.5f}}, {{-4,-0.5f,-4},{0,1,0},{0.45f,0.45f,0.5f}},
-    {{4,-0.5f,4},{0,1,0},{0.45f,0.45f,0.5f}}, {{-4,-0.5f,4},{0,1,0},{0.45f,0.45f,0.5f}},
-    {{-0.25f,-0.5f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}}, {{0.25f,-0.5f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}},
-    {{0.25f,1.6f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}}, {{-0.25f,-0.5f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}},
-    {{0.25f,1.6f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}}, {{-0.25f,1.6f,-0.25f},{0,0,1},{0.9f,0.25f,0.25f}},
-    {{-1.6f,-0.5f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}}, {{-1.2f,-0.5f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}},
-    {{-1.2f,2.1f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}}, {{-1.6f,-0.5f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}},
-    {{-1.2f,2.1f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}}, {{-1.6f,2.1f,0.4f},{1,0,0},{0.25f,0.85f,0.3f}},
-    {{1.2f,-0.5f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}}, {{1.6f,-0.5f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}},
-    {{1.6f,1.3f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}}, {{1.2f,-0.5f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}},
-    {{1.6f,1.3f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}}, {{1.2f,1.3f,-0.6f},{0,0,1},{0.3f,0.35f,0.95f}},
+    {{-4, -0.5f, -4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{4, -0.5f, -4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{4, -0.5f, 4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{-4, -0.5f, -4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{4, -0.5f, 4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{-4, -0.5f, 4}, {0, 1, 0}, {0.45f, 0.45f, 0.5f}},
+    {{-0.25f, -0.5f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{0.25f, -0.5f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{0.25f, 1.6f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{-0.25f, -0.5f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{0.25f, 1.6f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{-0.25f, 1.6f, -0.25f}, {0, 0, 1}, {0.9f, 0.25f, 0.25f}},
+    {{-1.6f, -0.5f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{-1.2f, -0.5f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{-1.2f, 2.1f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{-1.6f, -0.5f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{-1.2f, 2.1f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{-1.6f, 2.1f, 0.4f}, {1, 0, 0}, {0.25f, 0.85f, 0.3f}},
+    {{1.2f, -0.5f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
+    {{1.6f, -0.5f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
+    {{1.6f, 1.3f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
+    {{1.2f, -0.5f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
+    {{1.6f, 1.3f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
+    {{1.2f, 1.3f, -0.6f}, {0, 0, 1}, {0.3f, 0.35f, 0.95f}},
 };
 
 struct SceneUBO {
@@ -57,13 +73,20 @@ struct SceneUBO {
     alignas(16) glm::vec4 lightDir;
 };
 
-struct ShadowPC { glm::mat4 lightSpaceMatrix; };
+struct ShadowPC {
+    glm::mat4 lightSpaceMatrix;
+};
 
 class Ch45App {
-public:
-    void run() { initWindow(); initVulkan(); mainLoop(); cleanup(); }
+  public:
+    void run() {
+        initWindow();
+        initVulkan();
+        mainLoop();
+        cleanup();
+    }
 
-private:
+  private:
     GLFWwindow* window_ = nullptr;
     VkInstance instance_ = VK_NULL_HANDLE;
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
@@ -112,8 +135,7 @@ private:
     bool resized_ = false;
     InteractiveChapterTools interactive_;
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
         window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch45 - 级联阴影贴图（3 级联）", nullptr, nullptr);
@@ -124,8 +146,7 @@ private:
         });
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         createInstance(instance_);
         VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
         pickPhysicalDevice(instance_, surface_, physicalDevice_);
@@ -163,8 +184,7 @@ private:
         std::cout << "✅ CSM 初始化完成（" << CASCADE_COUNT << " 级联，" << SHADOW_DIM << "²）\n";
     }
 
-    std::array<float, CASCADE_COUNT + 1> computeSplits(float nearZ, float farZ) const
-    {
+    std::array<float, CASCADE_COUNT + 1> computeSplits(float nearZ, float farZ) const {
         std::array<float, CASCADE_COUNT + 1> splits{};
         const float lambda = 0.75f;
         for (uint32_t i = 0; i <= CASCADE_COUNT; ++i) {
@@ -176,14 +196,15 @@ private:
         return splits;
     }
 
-    glm::mat4 getLightView() const
-    {
+    glm::mat4 getLightView() const {
         return glm::lookAt(-lightDir_ * 10.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     }
 
-    glm::mat4 fitOrthoToCascade(const glm::mat4& lightView, float splitNear, float splitFar,
-                                const glm::mat4& invView, const glm::mat4& proj) const
-    {
+    glm::mat4 fitOrthoToCascade(const glm::mat4& lightView,
+                                float splitNear,
+                                float splitFar,
+                                const glm::mat4& invView,
+                                const glm::mat4& proj) const {
         const glm::mat4 invViewProj = invView * glm::inverse(proj);
         std::array<glm::vec4, 8> corners{};
         int idx = 0;
@@ -200,17 +221,15 @@ private:
             maxLS = glm::max(maxLS, glm::vec3(ls));
         }
         const float margin = 2.0f;
-        glm::mat4 lightProj = glm::ortho(minLS.x - margin, maxLS.x + margin,
-                                         minLS.y - margin, maxLS.y + margin,
-                                         -maxLS.z - 20.0f, -minLS.z + 20.0f);
+        glm::mat4 lightProj = glm::ortho(
+            minLS.x - margin, maxLS.x + margin, minLS.y - margin, maxLS.y + margin, -maxLS.z - 20.0f, -minLS.z + 20.0f);
         lightProj[1][1] *= -1.0f;
         (void)splitNear;
         (void)splitFar;
         return lightProj * lightView;
     }
 
-    void updateUBO(uint32_t frame)
-    {
+    void updateUBO(uint32_t frame) {
         const float nearZ = 0.1f;
         const float farZ = 40.0f;
         const auto splits = computeSplits(nearZ, farZ);
@@ -224,17 +243,25 @@ private:
         ubo.lightDir = glm::vec4(lightDir_, 0.0f);
         const glm::mat4 invView = glm::inverse(ubo.view);
         for (uint32_t i = 0; i < CASCADE_COUNT; ++i)
-            ubo.lightSpaceMatrix[i] = fitOrthoToCascade(ubo.lightView, splits[i], splits[i + 1], invView, ubo.projection);
+            ubo.lightSpaceMatrix[i] =
+                fitOrthoToCascade(ubo.lightView, splits[i], splits[i + 1], invView, ubo.projection);
         std::memcpy(sceneUBOMapped_[frame], &ubo, sizeof(ubo));
     }
 
-    void createShadowResources()
-    {
-        createImage(physicalDevice_, device_, SHADOW_DIM, SHADOW_DIM, VK_FORMAT_D32_SFLOAT,
+    void createShadowResources() {
+        createImage(physicalDevice_,
+                    device_,
+                    SHADOW_DIM,
+                    SHADOW_DIM,
+                    VK_FORMAT_D32_SFLOAT,
                     VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadowImage_, shadowMemory_,
-                    1, CASCADE_COUNT, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    shadowImage_,
+                    shadowMemory_,
+                    1,
+                    CASCADE_COUNT,
+                    VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
         VkImageViewCreateInfo arrayView{};
         arrayView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         arrayView.image = shadowImage_;
@@ -258,8 +285,7 @@ private:
         VK_CHECK(vkCreateSampler(device_, &samp, nullptr, &shadowSampler_));
     }
 
-    void createShadowRenderPass()
-    {
+    void createShadowRenderPass() {
         VkAttachmentDescription depth{};
         depth.format = VK_FORMAT_D32_SFLOAT;
         depth.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -274,12 +300,20 @@ private:
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.pDepthStencilAttachment = &depthRef;
         std::array<VkSubpassDependency, 2> deps{};
-        deps[0] = {VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, VK_ACCESS_SHADER_READ_BIT,
-                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_DEPENDENCY_BY_REGION_BIT};
-        deps[1] = {0, VK_SUBPASS_EXTERNAL, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                   VK_ACCESS_SHADER_READ_BIT, VK_DEPENDENCY_BY_REGION_BIT};
+        deps[0] = {VK_SUBPASS_EXTERNAL,
+                   0,
+                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                   VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                   VK_ACCESS_SHADER_READ_BIT,
+                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                   VK_DEPENDENCY_BY_REGION_BIT};
+        deps[1] = {0,
+                   VK_SUBPASS_EXTERNAL,
+                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                   VK_ACCESS_SHADER_READ_BIT,
+                   VK_DEPENDENCY_BY_REGION_BIT};
         VkRenderPassCreateInfo rp{};
         rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         rp.attachmentCount = 1;
@@ -302,18 +336,27 @@ private:
         }
     }
 
-    VkShaderModule loadShader(const char* name)
-    {
+    VkShaderModule loadShader(const char* name) {
         return createShaderModuleFromFile(device_, name);
     }
 
-    void createShadowPipeline()
-    {
+    void createShadowPipeline() {
         VkShaderModule vert = loadShader("csm_shadow.vert.spv");
         VkShaderModule frag = loadShader("csm_shadow.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {
-            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr},
-            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                      nullptr,
+                                                      0,
+                                                      VK_SHADER_STAGE_VERTEX_BIT,
+                                                      vert,
+                                                      "main",
+                                                      nullptr},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                      nullptr,
+                                                      0,
+                                                      VK_SHADER_STAGE_FRAGMENT_BIT,
+                                                      frag,
+                                                      "main",
+                                                      nullptr}};
         VkVertexInputBindingDescription bind{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
         VkVertexInputAttributeDescription attr{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0};
         VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -321,11 +364,15 @@ private:
         vi.pVertexBindingDescriptions = &bind;
         vi.vertexAttributeDescriptionCount = 1;
         vi.pVertexAttributeDescriptions = &attr;
-        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, nullptr, 0,
-                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE};
+        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                  nullptr,
+                                                  0,
+                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                                  VK_FALSE};
         VkViewport vp{0, 0, (float)SHADOW_DIM, (float)SHADOW_DIM, 0, 1};
         VkRect2D sc{{0, 0}, {SHADOW_DIM, SHADOW_DIM}};
-        VkPipelineViewportStateCreateInfo vps{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, &vp, 1, &sc};
+        VkPipelineViewportStateCreateInfo vps{
+            VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, &vp, 1, &sc};
         VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
         rs.polygonMode = VK_POLYGON_MODE_FILL;
         rs.cullMode = VK_CULL_MODE_BACK_BIT;
@@ -334,8 +381,15 @@ private:
         rs.depthBiasEnable = VK_TRUE;
         rs.depthBiasConstantFactor = 1.5f;
         rs.depthBiasSlopeFactor = 2.0f;
-        VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, nullptr, 0,
-                                                VK_SAMPLE_COUNT_1_BIT, VK_FALSE, 1.0f, nullptr, VK_FALSE, VK_FALSE};
+        VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                                                nullptr,
+                                                0,
+                                                VK_SAMPLE_COUNT_1_BIT,
+                                                VK_FALSE,
+                                                1.0f,
+                                                nullptr,
+                                                VK_FALSE,
+                                                VK_FALSE};
         VkPipelineDepthStencilStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
         ds.depthTestEnable = ds.depthWriteEnable = VK_TRUE;
         ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
@@ -363,8 +417,7 @@ private:
         vkDestroyShaderModule(device_, vert, nullptr);
     }
 
-    void createSceneRenderPass()
-    {
+    void createSceneRenderPass() {
         VkAttachmentDescription color{};
         color.format = swapFormat_;
         color.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -390,9 +443,13 @@ private:
         sub.colorAttachmentCount = 1;
         sub.pColorAttachments = &cref;
         sub.pDepthStencilAttachment = &dref;
-        VkSubpassDependency dep{VK_SUBPASS_EXTERNAL, 0, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                                0, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT};
+        VkSubpassDependency dep{
+            VK_SUBPASS_EXTERNAL,
+            0,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+            0,
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT};
         std::array<VkAttachmentDescription, 2> atts = {color, depthAtt};
         VkRenderPassCreateInfo rp{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
         rp.attachmentCount = static_cast<uint32_t>(atts.size());
@@ -404,36 +461,63 @@ private:
         VK_CHECK(vkCreateRenderPass(device_, &rp, nullptr, &sceneRenderPass_));
     }
 
-    void createScenePipeline()
-    {
+    void createScenePipeline() {
         VkShaderModule vert = loadShader("csm_scene.vert.spv");
         VkShaderModule frag = loadShader("csm_scene.frag.spv");
-        VkPipelineShaderStageCreateInfo stages[2] = {
-            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr},
-            {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr}};
+        VkPipelineShaderStageCreateInfo stages[2] = {{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                      nullptr,
+                                                      0,
+                                                      VK_SHADER_STAGE_VERTEX_BIT,
+                                                      vert,
+                                                      "main",
+                                                      nullptr},
+                                                     {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                                                      nullptr,
+                                                      0,
+                                                      VK_SHADER_STAGE_FRAGMENT_BIT,
+                                                      frag,
+                                                      "main",
+                                                      nullptr}};
         VkVertexInputBindingDescription bind{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
         std::array<VkVertexInputAttributeDescription, 3> attrs{};
-        attrs[0].location = 0; attrs[0].binding = 0;
-        attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT; attrs[0].offset = offsetof(Vertex, pos);
-        attrs[1].location = 1; attrs[1].binding = 0;
-        attrs[1].format = VK_FORMAT_R32G32B32_SFLOAT; attrs[1].offset = offsetof(Vertex, normal);
-        attrs[2].location = 2; attrs[2].binding = 0;
-        attrs[2].format = VK_FORMAT_R32G32B32_SFLOAT; attrs[2].offset = offsetof(Vertex, color);
+        attrs[0].location = 0;
+        attrs[0].binding = 0;
+        attrs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attrs[0].offset = offsetof(Vertex, pos);
+        attrs[1].location = 1;
+        attrs[1].binding = 0;
+        attrs[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attrs[1].offset = offsetof(Vertex, normal);
+        attrs[2].location = 2;
+        attrs[2].binding = 0;
+        attrs[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+        attrs[2].offset = offsetof(Vertex, color);
         VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
         vi.vertexBindingDescriptionCount = 1;
         vi.pVertexBindingDescriptions = &bind;
         vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
         vi.pVertexAttributeDescriptions = attrs.data();
-        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, nullptr, 0,
-                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, VK_FALSE};
-        VkPipelineViewportStateCreateInfo vps{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr};
+        VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                                                  nullptr,
+                                                  0,
+                                                  VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                                                  VK_FALSE};
+        VkPipelineViewportStateCreateInfo vps{
+            VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO, nullptr, 0, 1, nullptr, 1, nullptr};
         VkPipelineRasterizationStateCreateInfo rs{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
         rs.polygonMode = VK_POLYGON_MODE_FILL;
         rs.cullMode = VK_CULL_MODE_NONE;
         rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
         rs.lineWidth = 1.0f;
-        VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, nullptr, 0,
-                                                VK_SAMPLE_COUNT_1_BIT, VK_FALSE, 1.0f, nullptr, VK_FALSE, VK_FALSE};
+        VkPipelineMultisampleStateCreateInfo ms{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                                                nullptr,
+                                                0,
+                                                VK_SAMPLE_COUNT_1_BIT,
+                                                VK_FALSE,
+                                                1.0f,
+                                                nullptr,
+                                                VK_FALSE,
+                                                VK_FALSE};
         VkPipelineDepthStencilStateCreateInfo ds{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
         ds.depthTestEnable = ds.depthWriteEnable = VK_TRUE;
         ds.depthCompareOp = VK_COMPARE_OP_LESS;
@@ -443,7 +527,8 @@ private:
         cb.attachmentCount = 1;
         cb.pAttachments = &cba;
         VkDynamicState dynStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        VkPipelineDynamicStateCreateInfo dyn{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, nullptr, 0, 2, dynStates};
+        VkPipelineDynamicStateCreateInfo dyn{
+            VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, nullptr, 0, 2, dynStates};
         std::array<VkDescriptorSetLayoutBinding, 2> binds{};
         binds[0].binding = 0;
         binds[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -479,8 +564,7 @@ private:
         vkDestroyShaderModule(device_, vert, nullptr);
     }
 
-    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex)
-    {
+    void recordCommandBuffer(VkCommandBuffer cmd, uint32_t imageIndex) {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkBeginCommandBuffer(cmd, &beginInfo);
@@ -521,7 +605,8 @@ private:
         VkRect2D sc{{0, 0}, extent_};
         vkCmdSetViewport(cmd, 0, 1, &vp);
         vkCmdSetScissor(cmd, 0, 1, &sc);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeLayout_, 0, 1, &sceneDescSets_[currentFrame_], 0, nullptr);
+        vkCmdBindDescriptorSets(
+            cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, scenePipeLayout_, 0, 1, &sceneDescSets_[currentFrame_], 0, nullptr);
         vkCmdBindVertexBuffers(cmd, 0, 1, vertexBuffers, vertexOffsets);
         vkCmdDraw(cmd, static_cast<uint32_t>(SCENE.size()), 1, 0, 0);
         interactive_.renderUi(cmd);
@@ -530,12 +615,15 @@ private:
         vkEndCommandBuffer(cmd);
     }
 
-    void drawFrame()
-    {
+    void drawFrame() {
         vkWaitForFences(device_, 1, &inFlight_[currentFrame_], VK_TRUE, UINT64_MAX);
         uint32_t img = 0;
-        VkResult acq = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, imageAvailable_[currentFrame_], VK_NULL_HANDLE, &img);
-        if (acq == VK_ERROR_OUT_OF_DATE_KHR) { recreateSwapchain(); return; }
+        VkResult acq = vkAcquireNextImageKHR(
+            device_, swapchain_, UINT64_MAX, imageAvailable_[currentFrame_], VK_NULL_HANDLE, &img);
+        if (acq == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain();
+            return;
+        }
         updateUBO(currentFrame_);
         vkResetFences(device_, 1, &inFlight_[currentFrame_]);
         vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
@@ -558,13 +646,15 @@ private:
         present.pSwapchains = sc;
         present.pImageIndices = &img;
         VkResult pr = vkQueuePresentKHR(presentQueue_, &present);
-        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR || resized_) { resized_ = false; recreateSwapchain(); }
+        if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR || resized_) {
+            resized_ = false;
+            recreateSwapchain();
+        }
         interactive_.endFrame(currentFrame_);
         currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES;
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         std::cout << "🌑 CSM 运行中（ESC 退出）\n";
         auto lastTime = std::chrono::steady_clock::now();
         while (!glfwWindowShouldClose(window_)) {
@@ -573,20 +663,21 @@ private:
             const float dt = std::chrono::duration<float>(now - lastTime).count();
             lastTime = now;
             interactive_.beginFrame(dt);
-            if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS) glfwSetWindowShouldClose(window_, GLFW_TRUE);
+            if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+                glfwSetWindowShouldClose(window_, GLFW_TRUE);
             drawFrame();
         }
         vkDeviceWaitIdle(device_);
     }
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         auto sc = querySwapChainSupport(physicalDevice_, surface_);
         auto fmt = chooseSwapSurfaceFormat(sc.formats);
         auto mode = chooseSwapPresentMode(sc.presentModes);
         extent_ = chooseSwapExtent(sc.capabilities, window_);
         uint32_t count = sc.capabilities.minImageCount + 1;
-        if (sc.capabilities.maxImageCount > 0) count = std::min(count, sc.capabilities.maxImageCount);
+        if (sc.capabilities.maxImageCount > 0)
+            count = std::min(count, sc.capabilities.maxImageCount);
         VkSwapchainCreateInfoKHR ci{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
         ci.surface = surface_;
         ci.minImageCount = count;
@@ -607,8 +698,7 @@ private:
         swapFormat_ = fmt.format;
     }
 
-    void createImageViews()
-    {
+    void createImageViews() {
         swapViews_.resize(swapImages_.size());
         for (size_t i = 0; i < swapImages_.size(); ++i) {
             VkImageViewCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
@@ -620,8 +710,7 @@ private:
         }
     }
 
-    void createSceneFramebuffers()
-    {
+    void createSceneFramebuffers() {
         sceneFramebuffers_.resize(swapViews_.size());
         for (size_t i = 0; i < swapViews_.size(); ++i) {
             std::array<VkImageView, 2> att = {swapViews_[i], depth_.view};
@@ -636,41 +725,45 @@ private:
         }
     }
 
-    void createCommandPool()
-    {
+    void createCommandPool() {
         VkCommandPoolCreateInfo ci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         ci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         ci.queueFamilyIndex = queueIndices_.graphicsFamily.value();
         VK_CHECK(vkCreateCommandPool(device_, &ci, nullptr, &commandPool_));
     }
 
-    void createVertexBuffer()
-    {
+    void createVertexBuffer() {
         const VkDeviceSize sz = sizeof(Vertex) * SCENE.size();
-        createBuffer(physicalDevice_, device_, sz, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        createBuffer(physicalDevice_,
+                     device_,
+                     sz,
+                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     vertexBuffer_, vertexMemory_);
+                     vertexBuffer_,
+                     vertexMemory_);
         void* mapped = nullptr;
         vkMapMemory(device_, vertexMemory_, 0, sz, 0, &mapped);
         std::memcpy(mapped, SCENE.data(), static_cast<size_t>(sz));
         vkUnmapMemory(device_, vertexMemory_);
     }
 
-    void createSceneUBOs()
-    {
+    void createSceneUBOs() {
         sceneUBOs_.resize(MAX_FRAMES);
         sceneUBOMem_.resize(MAX_FRAMES);
         sceneUBOMapped_.resize(MAX_FRAMES);
         for (int i = 0; i < MAX_FRAMES; ++i) {
-            createBuffer(physicalDevice_, device_, sizeof(SceneUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            createBuffer(physicalDevice_,
+                         device_,
+                         sizeof(SceneUBO),
+                         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                         sceneUBOs_[i], sceneUBOMem_[i]);
+                         sceneUBOs_[i],
+                         sceneUBOMem_[i]);
             vkMapMemory(device_, sceneUBOMem_[i], 0, sizeof(SceneUBO), 0, &sceneUBOMapped_[i]);
         }
     }
 
-    void createDescriptorPool()
-    {
+    void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> sizes{};
         sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         sizes[0].descriptorCount = MAX_FRAMES;
@@ -683,8 +776,7 @@ private:
         VK_CHECK(vkCreateDescriptorPool(device_, &ci, nullptr, &descPool_));
     }
 
-    void createSceneDescriptorSets()
-    {
+    void createSceneDescriptorSets() {
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES, sceneSetLayout_);
         VkDescriptorSetAllocateInfo ai{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         ai.descriptorPool = descPool_;
@@ -712,8 +804,7 @@ private:
         }
     }
 
-    void createCommandBuffers()
-    {
+    void createCommandBuffers() {
         commandBuffers_.resize(MAX_FRAMES);
         VkCommandBufferAllocateInfo ai{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
         ai.commandPool = commandPool_;
@@ -722,8 +813,7 @@ private:
         VK_CHECK(vkAllocateCommandBuffers(device_, &ai, commandBuffers_.data()));
     }
 
-    void createSyncObjects()
-    {
+    void createSyncObjects() {
         imageAvailable_.resize(MAX_FRAMES);
         renderFinished_.resize(MAX_FRAMES);
         inFlight_.resize(MAX_FRAMES);
@@ -737,32 +827,36 @@ private:
         }
     }
 
-    void recreateSwapchain()
-    {
+    void recreateSwapchain() {
         int w = 0, h = 0;
         glfwGetFramebufferSize(window_, &w, &h);
-        while (w == 0 || h == 0) { glfwGetFramebufferSize(window_, &w, &h); glfwWaitEvents(); }
+        while (w == 0 || h == 0) {
+            glfwGetFramebufferSize(window_, &w, &h);
+            glfwWaitEvents();
+        }
         vkDeviceWaitIdle(device_);
-        for (auto fb : sceneFramebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto fb : sceneFramebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
         destroyDepthResources(device_, depth_);
-        for (auto v : swapViews_) vkDestroyImageView(device_, v, nullptr);
+        for (auto v : swapViews_)
+            vkDestroyImageView(device_, v, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         createSwapchain();
         createImageViews();
         depth_ = createDepthResources(physicalDevice_, device_, extent_);
         createSceneFramebuffers();
-        interactive_.onSwapchainRecreated(sceneRenderPass_, swapFormat_,
-            static_cast<uint32_t>(swapImages_.size()));
+        interactive_.onSwapchainRecreated(sceneRenderPass_, swapFormat_, static_cast<uint32_t>(swapImages_.size()));
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         vkDestroySampler(device_, shadowSampler_, nullptr);
         vkDestroyImageView(device_, shadowArrayView_, nullptr);
-        for (auto v : shadowLayerViews_) vkDestroyImageView(device_, v, nullptr);
+        for (auto v : shadowLayerViews_)
+            vkDestroyImageView(device_, v, nullptr);
         vkDestroyImage(device_, shadowImage_, nullptr);
         vkFreeMemory(device_, shadowMemory_, nullptr);
-        for (auto fb : shadowFramebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto fb : shadowFramebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
         vkDestroyRenderPass(device_, shadowRenderPass_, nullptr);
         vkDestroyPipeline(device_, shadowPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, shadowPipeLayout_, nullptr);
@@ -780,12 +874,14 @@ private:
             vkDestroyFence(device_, inFlight_[i], nullptr);
         }
         vkDestroyCommandPool(device_, commandPool_, nullptr);
-        for (auto fb : sceneFramebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto fb : sceneFramebuffers_)
+            vkDestroyFramebuffer(device_, fb, nullptr);
         destroyDepthResources(device_, depth_);
         vkDestroyPipeline(device_, scenePipeline_, nullptr);
         vkDestroyPipelineLayout(device_, scenePipeLayout_, nullptr);
         vkDestroyRenderPass(device_, sceneRenderPass_, nullptr);
-        for (auto v : swapViews_) vkDestroyImageView(device_, v, nullptr);
+        for (auto v : swapViews_)
+            vkDestroyImageView(device_, v, nullptr);
         vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         interactive_.shutdown(device_);
         vkDestroyDevice(device_, nullptr);
@@ -796,12 +892,16 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "══════════════════════════════════════════════════\n";
     std::cout << " 第45章：级联阴影贴图（CSM，3 级联 Practical Split）\n";
     std::cout << "══════════════════════════════════════════════════\n\n";
     Ch45App app;
-    try { app.run(); } catch (const std::exception& e) { std::cerr << "❌ " << e.what() << "\n"; return 1; }
+    try {
+        app.run();
+    } catch (const std::exception& e) {
+        std::cerr << "❌ " << e.what() << "\n";
+        return 1;
+    }
     return 0;
 }
