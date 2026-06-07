@@ -132,24 +132,16 @@ class App {
     }
 
     ~App() {
+        cleanupSwapchain();
+
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
             vkDestroySemaphore(device, imageAvailableSemaphores[i], nullptr);
             vkDestroyFence(device, inFlightFences[i], nullptr);
         }
-        for (const auto& semaphore : renderFinishedSemaphores) {
-            vkDestroySemaphore(device, semaphore, nullptr);
-        }
         vkDestroyCommandPool(device, commandPool, nullptr);
-        for (const auto& framebuffer : framebuffers) {
-            vkDestroyFramebuffer(device, framebuffer, nullptr);
-        }
         vkDestroyPipeline(device, graphicsPipeline, nullptr);
         vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
         vkDestroyRenderPass(device, renderPass, nullptr);
-        for (const auto& imageView : swapchainImageViews) {
-            vkDestroyImageView(device, imageView, nullptr);
-        }
-        vkDestroySwapchainKHR(device, swapchain, nullptr);
         vkDestroyDevice(device, nullptr);
         vkDestroySurfaceKHR(instance, surface, nullptr);
         if (ENABLE_LAYER_VALIDATION) {
@@ -164,11 +156,18 @@ class App {
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
         window = glfwCreateWindow(width, height, title.c_str(), nullptr, nullptr);
         if (window == nullptr) {
             throw std::runtime_error("Failed to create glfw window!");
         }
+        glfwSetWindowUserPointer(window, this);
+        glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
+    }
+
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+        auto app = reinterpret_cast<App*>(glfwGetWindowUserPointer(window));
+        app->framebufferResized = true;
     }
 
     static std::vector<const char*> getInstanceRequireExtensions() {
@@ -711,7 +710,7 @@ class App {
         }
 
         VkClearValue clearColor{
-            .color = {1.0, 1.0, 1.0, 1.0f},
+            .color = {0.2, 0.3, 0.3, 1.0f},
         };
         VkRenderPassBeginInfo rpInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -757,14 +756,28 @@ class App {
             throw std::runtime_error("Failed to allocate command buffers");
         }
 
-        for (size_t i = 0; i < commandBuffers.size(); i++) {
-            recordCommandBuffer(commandBuffers[i], static_cast<uint32_t>(i));
+    }
+
+    void createRenderFinishedSemaphores() {
+        renderFinishedSemaphores.resize(swapchainImages.size());
+
+        VkSemaphoreCreateInfo semaphoreInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        for (auto& semaphore : renderFinishedSemaphores) {
+            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create render finished semaphore!");
+            }
         }
+    }
+
+    void cleanupRenderFinishedSemaphores() {
+        for (const auto& semaphore : renderFinishedSemaphores) {
+            vkDestroySemaphore(device, semaphore, nullptr);
+        }
+        renderFinishedSemaphores.clear();
     }
 
     void createSyncObjects() {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores.resize(swapchainImages.size());
         inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
@@ -777,11 +790,7 @@ class App {
             }
         }
 
-        for (auto& semaphore : renderFinishedSemaphores) {
-            if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphore) != VK_SUCCESS) {
-                throw std::runtime_error("Failed to create render finished semaphore!");
-            }
-        }
+        createRenderFinishedSemaphores();
 
     }
 
@@ -803,9 +812,23 @@ class App {
 
     void drawFrame() {
         vkWaitForFences(device, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-        vkResetFences(device, 1, &inFlightFences[currentFrame]);
+
+        if (framebufferResized) {
+            framebufferResized = false;
+            reCreateSwapchain();
+            return;
+        }
+
         uint32_t imageIndex;
-        vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            reCreateSwapchain();
+            return;
+        } else if (result != VK_SUCCESS) {
+            throw std::runtime_error("Failed to acquire swap chain image");
+        }
+
+        vkResetFences(device, 1, &inFlightFences[currentFrame]);
         vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
         VkSubmitInfo submitInfo {
@@ -835,9 +858,49 @@ class App {
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
         presentInfo.pResults = nullptr;
-        vkQueuePresentKHR(presentQueue, &presentInfo);
+        result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
+            framebufferResized = false;
+            reCreateSwapchain();
+        } else if (result != VK_SUCCESS) {
+            throw std::runtime_error("Failed to present swap chain image");
+        }
 
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void cleanupSwapchain() {
+        for (const auto& framebuffer: framebuffers) {
+            vkDestroyFramebuffer(device, framebuffer, nullptr);
+        }
+        framebuffers.clear();
+
+        for (const auto& imageView : swapchainImageViews) {
+            vkDestroyImageView(device, imageView, nullptr);
+        }
+        swapchainImageViews.clear();
+
+        vkDestroySwapchainKHR(device, swapchain, nullptr);
+        swapchain = VK_NULL_HANDLE;
+
+        cleanupRenderFinishedSemaphores();
+    }
+
+    void reCreateSwapchain() {
+        int width, height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+        while (width == 0 || height == 0) {
+            glfwGetFramebufferSize(window, &width, &height);
+            glfwWaitEvents();
+        }
+        vkDeviceWaitIdle(device);
+        cleanupSwapchain();
+
+        createSwapchain();
+        createImageViews();
+        createFrameBuffers();
+        createRenderFinishedSemaphores();
     }
 
   private:
@@ -876,6 +939,7 @@ class App {
     std::vector<VkFence> inFlightFences;
 
     uint32_t currentFrame = 0;
+    bool framebufferResized = false;
 };
 
 }; // namespace hhq
