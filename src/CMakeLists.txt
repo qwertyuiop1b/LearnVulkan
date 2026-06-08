@@ -97,12 +97,17 @@ target_link_libraries(ch20_raytracing PRIVATE vulkan_tutorial_common)
 compile_shaders(ch20_raytracing)
 
 # ─── Chapter 21: Mesh Shaders ────────────────────────────────────────────────
-if(SHADER_COMPILER_SUPPORTS_MESH_SHADERS)
+include(CheckSymbolExists)
+check_symbol_exists(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT
+                    "vulkan/vulkan.h"
+                    VULKAN_HEADERS_HAVE_MESH_SHADER_EXT)
+
+if(SHADER_COMPILER_SUPPORTS_MESH_SHADERS AND VULKAN_HEADERS_HAVE_MESH_SHADER_EXT)
     add_executable(ch21_mesh_shader chapters/ch21_mesh_shader.cpp)
     target_link_libraries(ch21_mesh_shader PRIVATE vulkan_tutorial_common)
     compile_shaders(ch21_mesh_shader)
 else()
-    message(STATUS "Skipping ch21_mesh_shader: mesh/task shaders unsupported by shader compiler")
+    message(STATUS "Skipping ch21_mesh_shader: shader compiler or Vulkan headers lack VK_EXT_mesh_shader support")
 endif()
 
 # ─── Chapter 22: Bindless Rendering ──────────────────────────────────────────
@@ -160,7 +165,7 @@ if(VULKAN_HEADERS_HAVE_SHADER_OBJECT)
     target_link_libraries(ch31_shader_object PRIVATE vulkan_tutorial_common)
     compile_shaders(ch31_shader_object)
 else()
-    message(STATUS \"Skipping ch31_shader_object: Vulkan headers lack VK_EXT_shader_object types\")
+    message(STATUS "Skipping ch31_shader_object: Vulkan headers lack VK_EXT_shader_object types")
 endif()
 
 # ─── Chapter 32: Sparse Resources (Virtual Texturing) ────────────────────────
