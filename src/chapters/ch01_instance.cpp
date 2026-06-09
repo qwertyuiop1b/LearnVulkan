@@ -36,6 +36,8 @@
 
 #include <vulkan/vulkan_core.h>
 #include <vulkan_tutorial/utils.hpp>
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 #include <iostream>
 #include <stdexcept>
 
@@ -80,6 +82,12 @@ class Ch01App {
     // ── Step 1: 创建 VkInstance ───────────────────────────────────────────────
 
     void createInstance() {
+        if (!glfwInit()) {
+            throw std::runtime_error("Failed to initialize GLFW!");
+        }
+        if (!glfwVulkanSupported()) {
+            throw std::runtime_error("GLFW reports Vulkan not supported!");
+        }
         // 验证层检查
         if (ENABLE_VALIDATION_LAYERS && !checkValidationLayerSupport())
             throw std::runtime_error("请求的验证层不可用！请安装 Vulkan SDK。");
@@ -96,6 +104,8 @@ class Ch01App {
 
         // ② 获取所需扩展（GLFW 需要的窗口扩展 + 调试扩展 + macOS 扩展）
         auto extensions = getRequiredInstanceExtensions();
+        for (const auto& ext : extensions)
+            std::cout << "需要启用的实例扩展: " << ext << "\n";
 
         // ③ VkInstanceCreateInfo：实例创建的主配置结构体
         VkInstanceCreateInfo createInfo{};
@@ -106,10 +116,7 @@ class Ch01App {
 
         // macOS + MoltenVK 必须设置此标志，允许枚举非完全符合规范的物理设备
 #ifdef __APPLE__
-#ifdef __APPLE__
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
-
 #endif
 
         // ④ 配置验证层

@@ -115,7 +115,7 @@ inline std::vector<const char*> getRequiredInstanceExtensions() {
     if (ENABLE_VALIDATION_LAYERS)
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-        // macOS / MoltenVK 需要的扩展
+    // macOS / MoltenVK 需要的扩展
 #ifdef __APPLE__
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
