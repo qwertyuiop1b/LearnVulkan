@@ -34,89 +34,97 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+#include <vulkan/vulkan_core.h>
 #include <vulkan_tutorial/utils.hpp>
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
 #include <iostream>
 #include <stdexcept>
 
 // ─── vkCreateDebugUtilsMessengerEXT 不在 Vulkan 核心中 ──────────────────────
 // 需要通过 vkGetInstanceProcAddr 动态加载
 
-static VkResult createDebugUtilsMessengerEXT(
-    VkInstance                                instance,
-    const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-    const VkAllocationCallbacks*              pAllocator,
-    VkDebugUtilsMessengerEXT*                 pMessenger)
-{
+static VkResult createDebugUtilsMessengerEXT(VkInstance instance,
+                                             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                             const VkAllocationCallbacks* pAllocator,
+                                             VkDebugUtilsMessengerEXT* pMessenger) {
     auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
         vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
-    if (!func) return VK_ERROR_EXTENSION_NOT_PRESENT;
+    if (!func)
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
     return func(instance, pCreateInfo, pAllocator, pMessenger);
 }
 
-static void destroyDebugUtilsMessengerEXT(
-    VkInstance                   instance,
-    VkDebugUtilsMessengerEXT     messenger,
-    const VkAllocationCallbacks* pAllocator)
-{
+static void destroyDebugUtilsMessengerEXT(VkInstance instance,
+                                          VkDebugUtilsMessengerEXT messenger,
+                                          const VkAllocationCallbacks* pAllocator) {
     auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
         vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
-    if (func) func(instance, messenger, pAllocator);
+    if (func)
+        func(instance, messenger, pAllocator);
 }
 
 // ─── 应用程序类 ────────────────────────────────────────────────────────────────
 
 class Ch01App {
-public:
-    void run()
-    {
+  public:
+    void run() {
         createInstance();
         setupDebugMessenger();
         printInstanceInfo();
         cleanup();
     }
 
-private:
-    VkInstance               instance_  = VK_NULL_HANDLE;
+  private:
+    VkInstance instance_ = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debugMsgr_ = VK_NULL_HANDLE;
 
     // ── Step 1: 创建 VkInstance ───────────────────────────────────────────────
 
-    void createInstance()
-    {
+    void createInstance() {
+        if (!glfwInit()) {
+            throw std::runtime_error("Failed to initialize GLFW!");
+        }
+        if (!glfwVulkanSupported()) {
+            throw std::runtime_error("GLFW reports Vulkan not supported!");
+        }
         // 验证层检查
         if (ENABLE_VALIDATION_LAYERS && !checkValidationLayerSupport())
-            throw std::runtime_error(
-                "请求的验证层不可用！请安装 Vulkan SDK。");
+            throw std::runtime_error("请求的验证层不可用！请安装 Vulkan SDK。");
 
         // ① VkApplicationInfo：告知驱动程序我们的应用程序信息
         //   驱动程序可利用此信息进行针对性优化（例如识别已知引擎）
         VkApplicationInfo appInfo{};
-        appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName   = "Ch01 - Vulkan Instance";
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.pApplicationName = "Ch01 - Vulkan Instance";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName        = "No Engine";
-        appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion         = VK_API_VERSION_1_3;
+        appInfo.pEngineName = "No Engine";
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_3;
 
         // ② 获取所需扩展（GLFW 需要的窗口扩展 + 调试扩展 + macOS 扩展）
         auto extensions = getRequiredInstanceExtensions();
+        for (const auto& ext : extensions)
+            std::cout << "需要启用的实例扩展: " << ext << "\n";
 
         // ③ VkInstanceCreateInfo：实例创建的主配置结构体
         VkInstanceCreateInfo createInfo{};
-        createInfo.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        createInfo.pApplicationInfo        = &appInfo;
-        createInfo.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+        createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        createInfo.pApplicationInfo = &appInfo;
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         // macOS + MoltenVK 必须设置此标志，允许枚举非完全符合规范的物理设备
+#ifdef __APPLE__
         createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
 
         // ④ 配置验证层
         //   注意：在 pNext 中传入 debugCreateInfo，可以捕获
         //   vkCreateInstance/vkDestroyInstance 本身的调试消息
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         if (ENABLE_VALIDATION_LAYERS) {
-            createInfo.enabledLayerCount   = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+            createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
             populateDebugMessengerCreateInfo(debugCreateInfo);
             createInfo.pNext = &debugCreateInfo;
@@ -132,23 +140,21 @@ private:
 
     // ── Step 2: 注册调试信使 ──────────────────────────────────────────────────
 
-    void setupDebugMessenger()
-    {
-        if (!ENABLE_VALIDATION_LAYERS) return;
+    void setupDebugMessenger() {
+        if (!ENABLE_VALIDATION_LAYERS)
+            return;
 
         VkDebugUtilsMessengerCreateInfoEXT createInfo{};
         populateDebugMessengerCreateInfo(createInfo);
 
-        VK_CHECK(createDebugUtilsMessengerEXT(
-            instance_, &createInfo, nullptr, &debugMsgr_));
+        VK_CHECK(createDebugUtilsMessengerEXT(instance_, &createInfo, nullptr, &debugMsgr_));
 
         std::cout << "✅ 调试信使已注册！\n";
     }
 
     // ── 打印实例信息 ──────────────────────────────────────────────────────────
 
-    void printInstanceInfo()
-    {
+    void printInstanceInfo() {
         // 枚举所有可用扩展
         uint32_t extCount = 0;
         vkEnumerateInstanceExtensionProperties(nullptr, &extCount, nullptr);
@@ -157,8 +163,7 @@ private:
 
         std::cout << "\n📋 系统支持的 Instance 扩展（共 " << extCount << " 个）：\n";
         for (const auto& e : exts)
-            std::cout << "  - " << e.extensionName
-                      << " (spec version " << e.specVersion << ")\n";
+            std::cout << "  - " << e.extensionName << " (spec version " << e.specVersion << ")\n";
 
         // 枚举所有可用验证层
         uint32_t layerCount = 0;
@@ -174,8 +179,7 @@ private:
 
     // ── 清理资源（RAII 思想：创建与销毁成对出现）────────────────────────────
 
-    void cleanup()
-    {
+    void cleanup() {
         // 销毁顺序与创建顺序相反！
         if (ENABLE_VALIDATION_LAYERS && debugMsgr_ != VK_NULL_HANDLE)
             destroyDebugUtilsMessengerEXT(instance_, debugMsgr_, nullptr);
@@ -187,8 +191,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════\n";
     std::cout << " 第01章：VkInstance 与验证层\n";
     std::cout << "═══════════════════════════════════════\n\n";

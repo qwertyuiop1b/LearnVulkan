@@ -57,59 +57,55 @@
 #include <set>
 #include <stdexcept>
 
-constexpr uint32_t WIDTH  = 800;
+constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 
 class Ch05App {
-public:
-    void run()
-    {
+  public:
+    void run() {
         initWindow();
         initVulkan();
         mainLoop();
         cleanup();
     }
 
-private:
-    GLFWwindow*      window_         = nullptr;
-    VkInstance       instance_       = VK_NULL_HANDLE;
-    VkSurfaceKHR     surface_        = VK_NULL_HANDLE;
+  private:
+    GLFWwindow* window_ = nullptr;
+    VkInstance instance_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice         device_         = VK_NULL_HANDLE;
-    VkQueue          graphicsQueue_  = VK_NULL_HANDLE;
-    VkQueue          presentQueue_   = VK_NULL_HANDLE;
-    VkSwapchainKHR   swapchain_      = VK_NULL_HANDLE;
-    VkRenderPass     renderPass_     = VK_NULL_HANDLE;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkRenderPass renderPass_ = VK_NULL_HANDLE;
 
-    std::vector<VkImage>     swapchainImages_;
+    std::vector<VkImage> swapchainImages_;
     std::vector<VkImageView> swapchainImageViews_;
-    VkFormat                 swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
-    VkExtent2D               swapchainExtent_{};
+    VkFormat swapchainImageFormat_ = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapchainExtent_{};
 
-    void initWindow()
-    {
+    void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_RESIZABLE,  GLFW_FALSE);
+        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch05 - RenderPass", nullptr, nullptr);
     }
 
-    void initVulkan()
-    {
+    void initVulkan() {
         createInstance();
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
         createSwapchain();
-        createImageViews();    // ← 新增
-        createRenderPass();    // ← 新增
+        createImageViews(); // ← 新增
+        createRenderPass(); // ← 新增
         std::cout << "\n✅ 所有 Vulkan 对象初始化完成！\n";
     }
 
     // ─── 复用前几章的代码（省略重复注释） ────────────────────────────────────
 
-    void createInstance()
-    {
+    void createInstance() {
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.apiVersion = VK_API_VERSION_1_3;
@@ -120,7 +116,12 @@ private:
         ci.pApplicationInfo = &appInfo;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
+#ifdef __APPLE__
+#ifdef __APPLE__
         ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+
+#endif
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -128,13 +129,11 @@ private:
         VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
     }
 
-    void createSurface()
-    {
+    void createSurface() {
         VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
     }
 
-    void pickPhysicalDevice()
-    {
+    void pickPhysicalDevice() {
         uint32_t count = 0;
         vkEnumeratePhysicalDevices(instance_, &count, nullptr);
         std::vector<VkPhysicalDevice> devices(count);
@@ -146,13 +145,13 @@ private:
                 break;
             }
         }
-        if (physicalDevice_ == VK_NULL_HANDLE) throw std::runtime_error("无合适GPU");
+        if (physicalDevice_ == VK_NULL_HANDLE)
+            throw std::runtime_error("无合适GPU");
     }
 
-    void createLogicalDevice()
-    {
+    void createLogicalDevice() {
         QueueFamilyIndices idx = findQueueFamilies(physicalDevice_, surface_);
-        std::set<uint32_t> families = { idx.graphicsFamily.value(), idx.presentFamily.value() };
+        std::set<uint32_t> families = {idx.graphicsFamily.value(), idx.presentFamily.value()};
         const float pri = 1.0f;
         std::vector<VkDeviceQueueCreateInfo> qcis;
         for (uint32_t f : families) {
@@ -178,56 +177,54 @@ private:
         }
         VK_CHECK(vkCreateDevice(physicalDevice_, &ci, nullptr, &device_));
         vkGetDeviceQueue(device_, idx.graphicsFamily.value(), 0, &graphicsQueue_);
-        vkGetDeviceQueue(device_, idx.presentFamily.value(),  0, &presentQueue_);
+        vkGetDeviceQueue(device_, idx.presentFamily.value(), 0, &presentQueue_);
     }
 
-    void createSwapchain()
-    {
+    void createSwapchain() {
         SwapChainSupportDetails sc = querySwapChainSupport(physicalDevice_, surface_);
-        VkSurfaceFormatKHR fmt  = chooseSwapSurfaceFormat(sc.formats);
-        VkPresentModeKHR   mode = chooseSwapPresentMode(sc.presentModes);
-        VkExtent2D         ext  = chooseSwapExtent(sc.capabilities, window_);
+        VkSurfaceFormatKHR fmt = chooseSwapSurfaceFormat(sc.formats);
+        VkPresentModeKHR mode = chooseSwapPresentMode(sc.presentModes);
+        VkExtent2D ext = chooseSwapExtent(sc.capabilities, window_);
 
         uint32_t imgCount = sc.capabilities.minImageCount + 1;
         if (sc.capabilities.maxImageCount > 0)
             imgCount = std::min(imgCount, sc.capabilities.maxImageCount);
 
         VkSwapchainCreateInfoKHR ci{};
-        ci.sType            = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        ci.surface          = surface_;
-        ci.minImageCount    = imgCount;
-        ci.imageFormat      = fmt.format;
-        ci.imageColorSpace  = fmt.colorSpace;
-        ci.imageExtent      = ext;
+        ci.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        ci.surface = surface_;
+        ci.minImageCount = imgCount;
+        ci.imageFormat = fmt.format;
+        ci.imageColorSpace = fmt.colorSpace;
+        ci.imageExtent = ext;
         ci.imageArrayLayers = 1;
-        ci.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        ci.preTransform     = sc.capabilities.currentTransform;
-        ci.compositeAlpha   = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        ci.presentMode      = mode;
-        ci.clipped          = VK_TRUE;
+        ci.preTransform = sc.capabilities.currentTransform;
+        ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        ci.presentMode = mode;
+        ci.clipped = VK_TRUE;
         VK_CHECK(vkCreateSwapchainKHR(device_, &ci, nullptr, &swapchain_));
 
         vkGetSwapchainImagesKHR(device_, swapchain_, &imgCount, nullptr);
         swapchainImages_.resize(imgCount);
         vkGetSwapchainImagesKHR(device_, swapchain_, &imgCount, swapchainImages_.data());
         swapchainImageFormat_ = fmt.format;
-        swapchainExtent_      = ext;
+        swapchainExtent_ = ext;
         std::cout << "✅ 交换链创建成功（" << imgCount << " 张图像）\n";
     }
 
     // ─── 核心新增：创建图像视图 ───────────────────────────────────────────────
 
-    void createImageViews()
-    {
+    void createImageViews() {
         swapchainImageViews_.resize(swapchainImages_.size());
 
         for (size_t i = 0; i < swapchainImages_.size(); ++i) {
             VkImageViewCreateInfo ci{};
-            ci.sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            ci.image    = swapchainImages_[i];
-            ci.viewType = VK_IMAGE_VIEW_TYPE_2D;   // 将图像视作 2D 纹理
-            ci.format   = swapchainImageFormat_;
+            ci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            ci.image = swapchainImages_[i];
+            ci.viewType = VK_IMAGE_VIEW_TYPE_2D; // 将图像视作 2D 纹理
+            ci.format = swapchainImageFormat_;
 
             // components.swizzle：通道重映射（IDENTITY = 不重映射）
             // 例如可以将所有通道映射到 R 通道，实现灰度效果
@@ -237,11 +234,11 @@ private:
             ci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
             // subresourceRange：图像的哪个部分被此视图访问
-            ci.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-            ci.subresourceRange.baseMipLevel   = 0;   // 从第 0 个 mip 开始
-            ci.subresourceRange.levelCount     = 1;   // 共 1 个 mip 层级
-            ci.subresourceRange.baseArrayLayer = 0;   // 从第 0 个数组层开始
-            ci.subresourceRange.layerCount     = 1;   // 共 1 层（非 VR）
+            ci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            ci.subresourceRange.baseMipLevel = 0;   // 从第 0 个 mip 开始
+            ci.subresourceRange.levelCount = 1;     // 共 1 个 mip 层级
+            ci.subresourceRange.baseArrayLayer = 0; // 从第 0 个数组层开始
+            ci.subresourceRange.layerCount = 1;     // 共 1 层（非 VR）
 
             VK_CHECK(vkCreateImageView(device_, &ci, nullptr, &swapchainImageViews_[i]));
         }
@@ -250,44 +247,43 @@ private:
 
     // ─── 核心新增：创建渲染流程 ───────────────────────────────────────────────
 
-    void createRenderPass()
-    {
+    void createRenderPass() {
         // ① 附件描述（我们只有一个颜色附件）
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format         = swapchainImageFormat_;  // 必须匹配交换链格式
-        colorAttachment.samples        = VK_SAMPLE_COUNT_1_BIT;  // 不多重采样
+        colorAttachment.format = swapchainImageFormat_;  // 必须匹配交换链格式
+        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT; // 不多重采样
         // loadOp：渲染前对附件做什么
         //   CLEAR     → 用清除色清空（我们想要干净的画布）
         //   LOAD      → 保留上一帧内容
         //   DONT_CARE → 不关心，可能是任意值（最快）
-        colorAttachment.loadOp         = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         // storeOp：渲染后对附件做什么
         //   STORE     → 保存结果（我们需要显示到屏幕）
         //   DONT_CARE → 不保存（用于中间附件）
-        colorAttachment.storeOp        = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         // 模板缓冲（本章不使用）
-        colorAttachment.stencilLoadOp  = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         // 图像布局转换：
         //   initialLayout: 渲染开始时图像的布局（UNDEFINED = 不关心初始内容）
         //   finalLayout:   渲染结束时图像自动转换到的布局
-        colorAttachment.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout    = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
         // ② 附件引用（Subpass 通过引用使用附件）
         VkAttachmentReference colorAttachmentRef{};
-        colorAttachmentRef.attachment = 0;   // 引用上面 index=0 的附件
+        colorAttachmentRef.attachment = 0; // 引用上面 index=0 的附件
         // 此附件在 Subpass 执行期间使用的布局
         // GPU 会在进入 Subpass 前自动将图像转换到此布局
-        colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         // ③ Subpass（子流程）描述
         // 一个 RenderPass 可以有多个 Subpass（用于移动端的 Tile-Based 优化）
         // 后续 Subpass 可以读取前一个 Subpass 的输出（避免写回内存）
         VkSubpassDescription subpass{};
-        subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;  // 图形管线
-        subpass.colorAttachmentCount    = 1;
-        subpass.pColorAttachments       = &colorAttachmentRef;
+        subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS; // 图形管线
+        subpass.colorAttachmentCount = 1;
+        subpass.pColorAttachments = &colorAttachmentRef;
         // 其他附件引用（本章不用）:
         // pInputAttachments        → 从之前 subpass 读取
         // pResolveAttachments      → 多重采样解析目标
@@ -297,31 +293,30 @@ private:
         // 告诉 Vulkan：本 Subpass 必须等待交换链图像可用才能开始
         VkSubpassDependency dependency{};
         // VK_SUBPASS_EXTERNAL = RenderPass 外部（之前的所有操作）
-        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass    = 0;   // 我们的第一个（也是唯一的）subpass
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass = 0; // 我们的第一个（也是唯一的）subpass
         // 在哪个管线阶段需要等待/被等待
-        dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         // 等待写操作完成，才允许写操作开始
         dependency.srcAccessMask = 0;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
         // ⑤ 创建 RenderPass
         VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType           = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
-        renderPassInfo.pAttachments    = &colorAttachment;
-        renderPassInfo.subpassCount    = 1;
-        renderPassInfo.pSubpasses      = &subpass;
+        renderPassInfo.pAttachments = &colorAttachment;
+        renderPassInfo.subpassCount = 1;
+        renderPassInfo.pSubpasses = &subpass;
         renderPassInfo.dependencyCount = 1;
-        renderPassInfo.pDependencies   = &dependency;
+        renderPassInfo.pDependencies = &dependency;
 
         VK_CHECK(vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderPass_));
         std::cout << "✅ RenderPass 创建成功！\n";
     }
 
-    void mainLoop()
-    {
+    void mainLoop() {
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
             if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
@@ -329,8 +324,7 @@ private:
         }
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         for (auto& iv : swapchainImageViews_)
             vkDestroyImageView(device_, iv, nullptr);
@@ -344,8 +338,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════\n";
     std::cout << " 第05章：图像视图与渲染流程\n";
     std::cout << "═══════════════════════════════════════\n\n";

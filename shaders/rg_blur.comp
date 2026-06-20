@@ -1,0 +1,35 @@
+#version 450
+
+// 可分离高斯模糊（9-tap）
+// push constant 控制方向：horizontal=1 → 水平，horizontal=0 → 垂直
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform readonly  image2D inImage;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D outImage;
+
+layout(push_constant) uniform BlurPC {
+    int horizontal;  // 1=水平, 0=垂直
+    float blurStrength;
+} pc;
+
+// 9-tap 高斯权重
+const float weight[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+
+void main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size  = imageSize(inImage);
+    if (coord.x >= size.x || coord.y >= size.y) return;
+
+    vec4 result = imageLoad(inImage, coord) * weight[0];
+    ivec2 dir   = (pc.horizontal == 1) ? ivec2(1, 0) : ivec2(0, 1);
+
+    for (int i = 1; i < 5; ++i) {
+        ivec2 offset = dir * i;
+        result += imageLoad(inImage, clamp(coord + offset, ivec2(0), size - 1)) * weight[i];
+        result += imageLoad(inImage, clamp(coord - offset, ivec2(0), size - 1)) * weight[i];
+    }
+
+    imageStore(outImage, coord, result * pc.blurStrength);
+}

@@ -50,54 +50,52 @@
 // ─── 辅助函数 ──────────────────────────────────────────────────────────────────
 
 /// 将设备类型枚举转换为可读字符串
-static std::string deviceTypeToString(VkPhysicalDeviceType type)
-{
+static std::string deviceTypeToString(VkPhysicalDeviceType type) {
     switch (type) {
-        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "集成显卡 (Integrated GPU)";
-        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   return "独立显卡 (Discrete GPU)";
-        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    return "虚拟显卡 (Virtual GPU)";
-        case VK_PHYSICAL_DEVICE_TYPE_CPU:            return "CPU 软件渲染";
-        default:                                     return "其他/未知";
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        return "集成显卡 (Integrated GPU)";
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        return "独立显卡 (Discrete GPU)";
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+        return "虚拟显卡 (Virtual GPU)";
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        return "CPU 软件渲染";
+    default:
+        return "其他/未知";
     }
 }
 
 /// 打印详细的物理设备信息
-static void printDeviceInfo(VkPhysicalDevice device)
-{
+static void printDeviceInfo(VkPhysicalDevice device) {
     VkPhysicalDeviceProperties props;
-    VkPhysicalDeviceFeatures   features;
+    VkPhysicalDeviceFeatures features;
     vkGetPhysicalDeviceProperties(device, &props);
     vkGetPhysicalDeviceFeatures(device, &features);
 
     std::cout << "  📌 设备名称   : " << props.deviceName << "\n";
     std::cout << "  🖥️  设备类型   : " << deviceTypeToString(props.deviceType) << "\n";
-    std::cout << "  🔢 API 版本   : "
-              << VK_VERSION_MAJOR(props.apiVersion) << "."
-              << VK_VERSION_MINOR(props.apiVersion) << "."
-              << VK_VERSION_PATCH(props.apiVersion) << "\n";
+    std::cout << "  🔢 API 版本   : " << VK_VERSION_MAJOR(props.apiVersion) << "." << VK_VERSION_MINOR(props.apiVersion)
+              << "." << VK_VERSION_PATCH(props.apiVersion) << "\n";
     std::cout << "  🔢 Driver版本 : " << props.driverVersion << "\n";
-    std::cout << "  🏭 Vendor ID  : 0x" << std::hex << props.vendorID
-              << std::dec << "\n";
+    std::cout << "  🏭 Vendor ID  : 0x" << std::hex << props.vendorID << std::dec << "\n";
 
     // 打印重要的 Limits
     const auto& lim = props.limits;
-    std::cout << "  📐 最大纹理   : " << lim.maxImageDimension2D << "x"
-                                      << lim.maxImageDimension2D << "\n";
+    std::cout << "  📐 最大纹理   : " << lim.maxImageDimension2D << "x" << lim.maxImageDimension2D << "\n";
     std::cout << "  📦 最大UBO    : " << lim.maxUniformBufferRange << " bytes\n";
     std::cout << "  🔧 最大SSBO   : " << lim.maxStorageBufferRange << " bytes\n";
 
     // 打印重要功能
     std::cout << "  ✨ 功能支持   :\n";
-    std::cout << "    几何着色器  : " << (features.geometryShader    ? "✅" : "❌") << "\n";
+    std::cout << "    几何着色器  : " << (features.geometryShader ? "✅" : "❌") << "\n";
     std::cout << "    曲面细分    : " << (features.tessellationShader ? "✅" : "❌") << "\n";
-    std::cout << "    各向异性过滤: " << (features.samplerAnisotropy  ? "✅" : "❌") << "\n";
-    std::cout << "    多重采样    : " << (features.sampleRateShading  ? "✅" : "❌") << "\n";
-    std::cout << "    64位浮点    : " << (features.shaderFloat64       ? "✅" : "❌") << "\n";
+    std::cout << "    各向异性过滤: " << (features.samplerAnisotropy ? "✅" : "❌") << "\n";
+    std::cout << "    多重采样    : " << (features.sampleRateShading ? "✅" : "❌") << "\n";
+    std::cout << "    64位浮点    : " << (features.shaderFloat64 ? "✅" : "❌") << "\n";
 }
 
 /// 打印设备队列族信息
-static void printQueueFamilies(VkPhysicalDevice device)
-{
+static void printQueueFamilies(VkPhysicalDevice device) {
     uint32_t count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, nullptr);
     std::vector<VkQueueFamilyProperties> families(count);
@@ -107,10 +105,14 @@ static void printQueueFamilies(VkPhysicalDevice device)
     for (uint32_t i = 0; i < count; ++i) {
         const auto& qf = families[i];
         std::cout << "    [" << i << "] 数量=" << qf.queueCount << " 支持: ";
-        if (qf.queueFlags & VK_QUEUE_GRAPHICS_BIT)       std::cout << "Graphics ";
-        if (qf.queueFlags & VK_QUEUE_COMPUTE_BIT)        std::cout << "Compute ";
-        if (qf.queueFlags & VK_QUEUE_TRANSFER_BIT)       std::cout << "Transfer ";
-        if (qf.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) std::cout << "Sparse ";
+        if (qf.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            std::cout << "Graphics ";
+        if (qf.queueFlags & VK_QUEUE_COMPUTE_BIT)
+            std::cout << "Compute ";
+        if (qf.queueFlags & VK_QUEUE_TRANSFER_BIT)
+            std::cout << "Transfer ";
+        if (qf.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+            std::cout << "Sparse ";
         std::cout << "\n";
     }
 }
@@ -125,10 +127,9 @@ static void printQueueFamilies(VkPhysicalDevice device)
  *
  * @return 设备评分，0 表示不可用
  */
-static uint32_t scoreDevice(VkPhysicalDevice device)
-{
+static uint32_t scoreDevice(VkPhysicalDevice device) {
     VkPhysicalDeviceProperties props;
-    VkPhysicalDeviceFeatures   features;
+    VkPhysicalDeviceFeatures features;
     vkGetPhysicalDeviceProperties(device, &props);
     vkGetPhysicalDeviceFeatures(device, &features);
 
@@ -153,20 +154,18 @@ static uint32_t scoreDevice(VkPhysicalDevice device)
 // ─── 应用程序类 ────────────────────────────────────────────────────────────────
 
 class Ch02App {
-public:
-    void run()
-    {
+  public:
+    void run() {
         initVulkan();
         selectPhysicalDevice();
         cleanup();
     }
 
-private:
-    VkInstance       instance_       = VK_NULL_HANDLE;
+  private:
+    VkInstance instance_ = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
 
-    void initVulkan()
-    {
+    void initVulkan() {
         // 初始化 GLFW（仅用于获取需要的扩展）
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -175,28 +174,32 @@ private:
             throw std::runtime_error("验证层不可用");
 
         VkApplicationInfo appInfo{};
-        appInfo.sType      = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+        appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
         auto extensions = getRequiredInstanceExtensions();
 
         VkInstanceCreateInfo ci{};
-        ci.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-        ci.pApplicationInfo        = &appInfo;
-        ci.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+        ci.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+        ci.pApplicationInfo = &appInfo;
+        ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         ci.ppEnabledExtensionNames = extensions.data();
-        ci.flags                  |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#ifdef __APPLE__
+#ifdef __APPLE__
+        ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+#endif
+
+#endif
 
         if (ENABLE_VALIDATION_LAYERS) {
-            ci.enabledLayerCount   = static_cast<uint32_t>(VALIDATION_LAYERS.size());
+            ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
         }
 
         VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
     }
 
-    void selectPhysicalDevice()
-    {
+    void selectPhysicalDevice() {
         // ① 枚举所有物理设备
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(instance_, &deviceCount, nullptr);
@@ -238,8 +241,7 @@ private:
         std::cout << "✅ 已选择设备：" << props.deviceName << "\n";
     }
 
-    void cleanup()
-    {
+    void cleanup() {
         // 注意：VkPhysicalDevice 不需要手动销毁
         // 它随 VkInstance 的销毁自动释放
         vkDestroyInstance(instance_, nullptr);
@@ -248,8 +250,7 @@ private:
     }
 };
 
-int main()
-{
+int main() {
     std::cout << "═══════════════════════════════════════\n";
     std::cout << " 第02章：物理设备选择与队列族\n";
     std::cout << "═══════════════════════════════════════\n\n";

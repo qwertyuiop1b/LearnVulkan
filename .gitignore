@@ -1,5 +1,11 @@
-build/
-.bin
-.DS_Store
 .vscode
+.idea
 .cursor
+.DS_Store
+.cache
+.bin
+*.spv
+*.obj
+
+build/
+

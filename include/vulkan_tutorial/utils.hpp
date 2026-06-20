@@ -24,33 +24,31 @@
 // ─── 错误检查宏 ───────────────────────────────────────────────────────────────
 
 /// 检查 VkResult，失败则抛出带描述的异常
-#define VK_CHECK(call)                                                       \
-    do {                                                                     \
-        VkResult _result = (call);                                           \
-        if (_result != VK_SUCCESS) {                                         \
-            throw std::runtime_error(                                        \
-                std::string("[VK_CHECK] ") + #call +                        \
-                " failed with code " + std::to_string(_result) +            \
-                " at " __FILE__ ":" + std::to_string(__LINE__));            \
-        }                                                                    \
+#define VK_CHECK(call)                                                                                                 \
+    do {                                                                                                               \
+        VkResult _result = (call);                                                                                     \
+        if (_result != VK_SUCCESS) {                                                                                   \
+            throw std::runtime_error(std::string("[VK_CHECK] ") + #call + " failed with code " +                       \
+                                     std::to_string(_result) + " at " __FILE__ ":" + std::to_string(__LINE__));        \
+        }                                                                                                              \
     } while (0)
 
 // ─── 验证层配置 ───────────────────────────────────────────────────────────────
 
 #ifdef NDEBUG
-    constexpr bool ENABLE_VALIDATION_LAYERS = false;
+constexpr bool ENABLE_VALIDATION_LAYERS = false;
 #else
-    constexpr bool ENABLE_VALIDATION_LAYERS = true;
+constexpr bool ENABLE_VALIDATION_LAYERS = true;
 #endif
 
-inline const std::vector<const char*> VALIDATION_LAYERS = {
-    "VK_LAYER_KHRONOS_validation"
-};
+inline const std::vector<const char*> VALIDATION_LAYERS = {"VK_LAYER_KHRONOS_validation"};
 
 inline const std::vector<const char*> DEVICE_EXTENSIONS = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    // macOS 上 MoltenVK 需要以下扩展
-    "VK_KHR_portability_subset"
+// macOS 上 MoltenVK 需要以下扩展
+#ifdef __APPLE__
+    "VK_KHR_portability_subset",
+#endif
 };
 
 // ─── 调试信使 ──────────────────────────────────────────────────────────────────
@@ -60,12 +58,10 @@ inline const std::vector<const char*> DEVICE_EXTENSIONS = {
  *
  * 当验证层检测到问题时，此函数被调用，将信息打印到 stderr。
  */
-inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT      severity,
-    VkDebugUtilsMessageTypeFlagsEXT             /*type*/,
-    const VkDebugUtilsMessengerCallbackDataEXT* data,
-    void*                                       /*userData*/)
-{
+inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                                                    VkDebugUtilsMessageTypeFlagsEXT /*type*/,
+                                                    const VkDebugUtilsMessengerCallbackDataEXT* data,
+                                                    void* /*userData*/) {
     const char* prefix = "[VK]";
     if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
         prefix = "\033[31m[VK ERROR]\033[0m";
@@ -75,41 +71,35 @@ inline VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
         prefix = "\033[36m[VK INFO]\033[0m";
 
     std::cerr << prefix << " " << data->pMessage << "\n";
-    return VK_FALSE;   // 不中止调用
+    return VK_FALSE; // 不中止调用
 }
 
 /// 填充 VkDebugUtilsMessengerCreateInfoEXT 结构体
-inline void populateDebugMessengerCreateInfo(
-    VkDebugUtilsMessengerCreateInfoEXT& info)
-{
+inline void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& info) {
     info = {};
     info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
     info.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    info.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT    |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                       VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     info.pfnUserCallback = debugCallback;
 }
 
 // ─── 验证层支持检测 ────────────────────────────────────────────────────────────
 
 /// 检查所需验证层是否被系统支持
-inline bool checkValidationLayerSupport()
-{
+inline bool checkValidationLayerSupport() {
     uint32_t count = 0;
     vkEnumerateInstanceLayerProperties(&count, nullptr);
     std::vector<VkLayerProperties> available(count);
     vkEnumerateInstanceLayerProperties(&count, available.data());
 
     for (const char* name : VALIDATION_LAYERS) {
-        bool found = std::any_of(available.begin(), available.end(),
-            [name](const VkLayerProperties& p) {
-                return std::strcmp(p.layerName, name) == 0;
-            });
-        if (!found) return false;
+        bool found = std::any_of(available.begin(), available.end(), [name](const VkLayerProperties& p) {
+            return std::strcmp(p.layerName, name) == 0;
+        });
+        if (!found)
+            return false;
     }
     return true;
 }
@@ -117,8 +107,7 @@ inline bool checkValidationLayerSupport()
 // ─── Instance 扩展枚举 ────────────────────────────────────────────────────────
 
 /// 获取创建 VkInstance 所需的扩展列表（含调试扩展和 macOS 兼容性扩展）
-inline std::vector<const char*> getRequiredInstanceExtensions()
-{
+inline std::vector<const char*> getRequiredInstanceExtensions() {
     uint32_t glfwCount = 0;
     const char** glfwExts = glfwGetRequiredInstanceExtensions(&glfwCount);
     std::vector<const char*> extensions(glfwExts, glfwExts + glfwCount);
@@ -127,8 +116,10 @@ inline std::vector<const char*> getRequiredInstanceExtensions()
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     // macOS / MoltenVK 需要的扩展
+#ifdef __APPLE__
     extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+#endif
 
     return extensions;
 }
@@ -145,9 +136,7 @@ inline std::vector<const char*> getRequiredInstanceExtensions()
  * @param device   逻辑设备
  * @param filename SPIR-V 文件名（不含路径，如 "triangle.vert.spv"）
  */
-inline VkShaderModule createShaderModuleFromFile(VkDevice device,
-                                                  const std::string& filename)
-{
+inline VkShaderModule createShaderModuleFromFile(VkDevice device, const std::string& filename) {
 #ifndef SHADER_DIR
     const std::string path = filename;
 #else
@@ -165,21 +154,19 @@ inline VkShaderModule createShaderModuleFromFile(VkDevice device,
     file.read(code.data(), static_cast<std::streamsize>(fileSize));
 
     VkShaderModuleCreateInfo ci{};
-    ci.sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    ci.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     ci.codeSize = code.size();
-    ci.pCode    = reinterpret_cast<const uint32_t*>(code.data());
+    ci.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
     VkShaderModule shaderModule = VK_NULL_HANDLE;
     VkResult result = vkCreateShaderModule(device, &ci, nullptr, &shaderModule);
     if (result != VK_SUCCESS)
-        throw std::runtime_error("创建着色器模块失败: " + filename +
-                                 " (code=" + std::to_string(result) + ")");
+        throw std::runtime_error("创建着色器模块失败: " + filename + " (code=" + std::to_string(result) + ")");
     return shaderModule;
 }
 
 /// 读取二进制文件（SPIR-V shader 字节码）
-inline std::vector<char> readFile(const std::string& filename)
-{
+inline std::vector<char> readFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
     if (!file.is_open())
         throw std::runtime_error("Failed to open file: " + filename);
@@ -200,8 +187,8 @@ inline std::vector<char> readFile(const std::string& filename)
  * 使用 std::optional 表示"尚未找到"的状态。
  */
 struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;   ///< 支持图形命令的队列族
-    std::optional<uint32_t> presentFamily;    ///< 支持窗口呈现的队列族
+    std::optional<uint32_t> graphicsFamily; ///< 支持图形命令的队列族
+    std::optional<uint32_t> presentFamily;  ///< 支持窗口呈现的队列族
 
     /// 两个队列族都已找到则返回 true
     [[nodiscard]] bool isComplete() const {
@@ -210,9 +197,7 @@ struct QueueFamilyIndices {
 };
 
 /// 查找物理设备上满足需求的队列族索引
-inline QueueFamilyIndices findQueueFamilies(
-    VkPhysicalDevice device, VkSurfaceKHR surface)
-{
+inline QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface) {
     QueueFamilyIndices indices;
 
     uint32_t count = 0;
@@ -229,7 +214,8 @@ inline QueueFamilyIndices findQueueFamilies(
         if (presentSupport)
             indices.presentFamily = i;
 
-        if (indices.isComplete()) break;
+        if (indices.isComplete())
+            break;
     }
     return indices;
 }
@@ -244,14 +230,12 @@ inline QueueFamilyIndices findQueueFamilies(
  * - presentModes: 支持的呈现模式（FIFO/Mailbox/Immediate 等）
  */
 struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR        capabilities;
+    VkSurfaceCapabilitiesKHR capabilities;
     std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR>   presentModes;
+    std::vector<VkPresentModeKHR> presentModes;
 };
 
-inline SwapChainSupportDetails querySwapChainSupport(
-    VkPhysicalDevice device, VkSurfaceKHR surface)
-{
+inline SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
     SwapChainSupportDetails details;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
@@ -259,47 +243,38 @@ inline SwapChainSupportDetails querySwapChainSupport(
     vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
     if (formatCount) {
         details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(
-            device, surface, &formatCount, details.formats.data());
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
     }
 
     uint32_t modeCount = 0;
     vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &modeCount, nullptr);
     if (modeCount) {
         details.presentModes.resize(modeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(
-            device, surface, &modeCount, details.presentModes.data());
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &modeCount, details.presentModes.data());
     }
     return details;
 }
 
 /// 选择最佳表面格式（优先 B8G8R8A8_SRGB + SRGB_NONLINEAR）
-inline VkSurfaceFormatKHR chooseSwapSurfaceFormat(
-    const std::vector<VkSurfaceFormatKHR>& available)
-{
+inline VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& available) {
     for (const auto& fmt : available) {
-        if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB &&
-            fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB && fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
             return fmt;
     }
     return available[0];
 }
 
 /// 选择最佳呈现模式（优先三缓冲 Mailbox，无则 FIFO）
-inline VkPresentModeKHR chooseSwapPresentMode(
-    const std::vector<VkPresentModeKHR>& available)
-{
+inline VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& available) {
     for (auto mode : available) {
         if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
             return mode;
     }
-    return VK_PRESENT_MODE_FIFO_KHR;   // FIFO 是 Vulkan 规范保证必须支持的
+    return VK_PRESENT_MODE_FIFO_KHR; // FIFO 是 Vulkan 规范保证必须支持的
 }
 
 /// 选择交换链图像分辨率（尽量匹配窗口实际像素大小）
-inline VkExtent2D chooseSwapExtent(
-    const VkSurfaceCapabilitiesKHR& caps, GLFWwindow* window)
-{
+inline VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& caps, GLFWwindow* window) {
     if (caps.currentExtent.width != UINT32_MAX)
         return caps.currentExtent;
 
@@ -307,20 +282,14 @@ inline VkExtent2D chooseSwapExtent(
     int height = 0;
     glfwGetFramebufferSize(window, &width, &height);
 
-    VkExtent2D actual = {
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
-    };
-    actual.width  = std::clamp(actual.width,
-        caps.minImageExtent.width,  caps.maxImageExtent.width);
-    actual.height = std::clamp(actual.height,
-        caps.minImageExtent.height, caps.maxImageExtent.height);
+    VkExtent2D actual = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    actual.width = std::clamp(actual.width, caps.minImageExtent.width, caps.maxImageExtent.width);
+    actual.height = std::clamp(actual.height, caps.minImageExtent.height, caps.maxImageExtent.height);
     return actual;
 }
 
 /// 检查物理设备是否支持所需的设备扩展
-inline bool checkDeviceExtensionSupport(VkPhysicalDevice device)
-{
+inline bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
     uint32_t count = 0;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> available(count);
