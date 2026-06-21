@@ -101,6 +101,8 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -112,7 +114,6 @@
 
 static const std::vector<const char*> RT_DEVICE_EXTENSIONS = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    "VK_KHR_portability_subset",       // macOS
     "VK_KHR_ray_tracing_pipeline",     // 光线追踪管线
     "VK_KHR_acceleration_structure",   // 加速结构
     "VK_KHR_buffer_device_address",    // GPU 缓冲地址
@@ -211,8 +212,14 @@ class Ch20App {
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
 
     // ── 光线追踪管线 ───────────────────────────────────────────────────────
+    VkDescriptorSetLayout rtDescSetLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool      rtDescPool_      = VK_NULL_HANDLE;
+    VkDescriptorSet       rtDescSet_       = VK_NULL_HANDLE;
     VkPipelineLayout rtPipelineLayout_ = VK_NULL_HANDLE;
     VkPipeline rtPipeline_ = VK_NULL_HANDLE;
+
+    // ── SBT 区域（由 createShaderBindingTable 填写） ────────────────────
+    VkStridedDeviceAddressRegionKHR sbtRgen_{}, sbtMiss_{}, sbtHit_{}, sbtCall_{};
 
     // ── 加速结构 ───────────────────────────────────────────────────────────
     VkAccelerationStructureKHR blas_ = VK_NULL_HANDLE; ///< 三角形网格
@@ -226,10 +233,20 @@ class Ch20App {
     VkBuffer sbtBuffer_ = VK_NULL_HANDLE;
     VkDeviceMemory sbtMemory_ = VK_NULL_HANDLE;
 
+    // ── 材质 SSBO ─────────────────────────────────────────────────────────
+    VkBuffer materialBuffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory materialMemory_ = VK_NULL_HANDLE;
+
     // ── 输出图像（光线追踪结果写入这里，再 blit 到交换链） ────────────────
     VkImage rtOutputImage_ = VK_NULL_HANDLE;
     VkDeviceMemory rtOutputMemory_ = VK_NULL_HANDLE;
     VkImageView rtOutputView_ = VK_NULL_HANDLE;
+
+    // ── 累积图像（rgba32f，跨帧路径追踪累积） ────────────────────────────
+    VkImage        accumImage_        = VK_NULL_HANDLE;
+    VkDeviceMemory accumMemory_       = VK_NULL_HANDLE;
+    VkImageView    accumView_         = VK_NULL_HANDLE;
+    uint32_t       accumFrameCount_   = 0;
 
     std::vector<VkImage> swapchainImages_;
     std::vector<VkImageView> swapchainImageViews_;
@@ -273,6 +290,7 @@ class Ch20App {
             createImageViews();
             createCommandPool();
             createRTOutputImage();
+            createAccumImage();
             buildAccelerationStructures();
             createRTPipeline();
             createShaderBindingTable();
@@ -382,6 +400,18 @@ class Ch20App {
         asFeatures.accelerationStructure = VK_TRUE;
         asFeatures.pNext = &rtFeatures;
 
+        // 动态构建扩展列表，VK_KHR_portability_subset 仅在设备支持时添加（macOS）
+        std::vector<const char*> enabledExts(RT_DEVICE_EXTENSIONS.begin(), RT_DEVICE_EXTENSIONS.end());
+        {
+            uint32_t extCount = 0;
+            vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount, nullptr);
+            std::vector<VkExtensionProperties> availExts(extCount);
+            vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount, availExts.data());
+            for (auto& e : availExts)
+                if (std::string(e.extensionName) == "VK_KHR_portability_subset")
+                    enabledExts.push_back("VK_KHR_portability_subset");
+        }
+
         VkPhysicalDeviceFeatures feat{};
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -389,8 +419,8 @@ class Ch20App {
         ci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size());
         ci.pQueueCreateInfos = qcis.data();
         ci.pEnabledFeatures = &feat;
-        ci.enabledExtensionCount = static_cast<uint32_t>(RT_DEVICE_EXTENSIONS.size());
-        ci.ppEnabledExtensionNames = RT_DEVICE_EXTENSIONS.data();
+        ci.enabledExtensionCount = static_cast<uint32_t>(enabledExts.size());
+        ci.ppEnabledExtensionNames = enabledExts.data();
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -425,72 +455,108 @@ class Ch20App {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // 构建加速结构（BLAS + TLAS）
+    // 构建加速结构（球体 BLAS + 多实例 TLAS + 材质 SSBO）
     // ═══════════════════════════════════════════════════════════════════════
 
+    // GPU 材质（std430 对齐，32字节）
+    struct MaterialGPU {
+        float albedo[4]; // xyz=albedo, w=fuzz(Metal)/ior(Dielectric)
+        int32_t type;    // 0=Lambertian, 1=Metal, 2=Dielectric
+        int32_t pad[3];
+    };
+
+    // 生成单位球体网格（lat×lon 细分）
+    void genUnitSphere(int nlat, int nlon,
+                       std::vector<float>& verts, std::vector<uint32_t>& idx) {
+        for (int i = 0; i <= nlat; ++i) {
+            float phi = 3.14159265f * i / nlat;
+            for (int j = 0; j <= nlon; ++j) {
+                float theta = 2.f * 3.14159265f * j / nlon;
+                verts.push_back(std::sin(phi) * std::cos(theta));
+                verts.push_back(std::cos(phi));
+                verts.push_back(std::sin(phi) * std::sin(theta));
+            }
+        }
+        for (int i = 0; i < nlat; ++i)
+            for (int j = 0; j < nlon; ++j) {
+                uint32_t a = i * (nlon + 1) + j;
+                uint32_t b = a + 1;
+                uint32_t c = a + (nlon + 1);
+                uint32_t d = c + 1;
+                idx.insert(idx.end(), {a, c, b, b, c, d});
+            }
+    }
+
+    // 构造 3×4 行主序变换矩阵（均匀缩放 + 平移）
+    static VkTransformMatrixKHR makeTransform(float s, float tx, float ty, float tz) {
+        VkTransformMatrixKHR m{};
+        m.matrix[0][0] = s;  m.matrix[0][3] = tx;
+        m.matrix[1][1] = s;  m.matrix[1][3] = ty;
+        m.matrix[2][2] = s;  m.matrix[2][3] = tz;
+        return m;
+    }
+
+    // 简单整数哈希，用于确定性随机场景生成
+    static float ihash(int n) {
+        n = (n ^ 61) ^ (n >> 16);
+        n += (n << 3);
+        n ^= (n >> 4);
+        n *= 0x27d4eb2d;
+        n ^= (n >> 15);
+        return float(n & 0x7fffffff) / float(0x7fffffff);
+    }
+
     void buildAccelerationStructures() {
-        // 一个三角形的顶点（NDC 坐标）
-        const float vertices[] = {
-            -0.5f,
-            -0.5f,
-            0.0f,
-            0.5f,
-            -0.5f,
-            0.0f,
-            0.0f,
-            0.5f,
-            0.0f,
-        };
-        const uint32_t indices[] = {0, 1, 2};
+        // ── 生成单位球体网格（16×16 细分） ────────────────────────────────
+        std::vector<float>    sphereVerts;
+        std::vector<uint32_t> sphereIdx;
+        genUnitSphere(16, 16, sphereVerts, sphereIdx);
+        const uint32_t numSphereVerts = static_cast<uint32_t>(sphereVerts.size() / 3);
+        const uint32_t numSphereTris  = static_cast<uint32_t>(sphereIdx.size() / 3);
 
         // ── 创建顶点/索引缓冲（BLAS 构建时读取） ─────────────────────────
         VkBuffer vertBuf, idxBuf;
         VkDeviceMemory vertMem, idxMem;
-        createBufferForAS(sizeof(vertices),
+        VkDeviceSize vertBytes = sphereVerts.size() * sizeof(float);
+        VkDeviceSize idxBytes  = sphereIdx.size()  * sizeof(uint32_t);
+        createBufferForAS(vertBytes,
                           VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
                               VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-                          vertices,
-                          sizeof(vertices),
-                          vertBuf,
-                          vertMem);
-        createBufferForAS(sizeof(indices),
+                          sphereVerts.data(), vertBytes, vertBuf, vertMem);
+        createBufferForAS(idxBytes,
                           VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
                               VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-                          indices,
-                          sizeof(indices),
-                          idxBuf,
-                          idxMem);
+                          sphereIdx.data(), idxBytes, idxBuf, idxMem);
 
         VkDeviceAddress vertAddr = getBufferDeviceAddress(vertBuf);
-        VkDeviceAddress idxAddr = getBufferDeviceAddress(idxBuf);
+        VkDeviceAddress idxAddr  = getBufferDeviceAddress(idxBuf);
 
-        // ── BLAS 几何描述 ──────────────────────────────────────────────────
+        // ── BLAS 几何描述（单位球体） ─────────────────────────────────────
         VkAccelerationStructureGeometryKHR geom{};
-        geom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+        geom.sType        = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
         geom.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
-        geom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
-        geom.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+        geom.flags        = VK_GEOMETRY_OPAQUE_BIT_KHR;
+        geom.geometry.triangles.sType        = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
         geom.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
         geom.geometry.triangles.vertexData.deviceAddress = vertAddr;
         geom.geometry.triangles.vertexStride = sizeof(float) * 3;
-        geom.geometry.triangles.maxVertex = 2;
-        geom.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+        geom.geometry.triangles.maxVertex    = numSphereVerts - 1;
+        geom.geometry.triangles.indexType    = VK_INDEX_TYPE_UINT32;
         geom.geometry.triangles.indexData.deviceAddress = idxAddr;
 
         // ── 查询 BLAS 构建所需的内存大小 ──────────────────────────────────
         VkAccelerationStructureBuildGeometryInfoKHR blasInfo{};
-        blasInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-        blasInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
-        blasInfo.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-        blasInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        blasInfo.sType         = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        blasInfo.type          = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+        blasInfo.flags         = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+        blasInfo.mode          = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
         blasInfo.geometryCount = 1;
-        blasInfo.pGeometries = &geom;
+        blasInfo.pGeometries   = &geom;
 
-        uint32_t numTriangles = 1;
         VkAccelerationStructureBuildSizesInfoKHR sizeInfo{};
         sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
         fpGetAccelBuildSizes_(
-            device_, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasInfo, &numTriangles, &sizeInfo);
+            device_, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &blasInfo, &numSphereTris, &sizeInfo);
 
         // ── 创建 BLAS 缓冲和对象 ──────────────────────────────────────────
         createBuffer(sizeInfo.accelerationStructureSize,
@@ -519,7 +585,7 @@ class Ch20App {
         blasInfo.dstAccelerationStructure = blas_;
         blasInfo.scratchData.deviceAddress = getBufferDeviceAddress(scratchBuf);
 
-        VkAccelerationStructureBuildRangeInfoKHR rangeInfo{numTriangles, 0, 0, 0};
+        VkAccelerationStructureBuildRangeInfoKHR rangeInfo{numSphereTris, 0, 0, 0};
         const VkAccelerationStructureBuildRangeInfoKHR* pRangeInfo = &rangeInfo;
 
         VkCommandBuffer cmd = beginSingleTimeCommands();
@@ -532,27 +598,79 @@ class Ch20App {
         addrInfo.accelerationStructure = blas_;
         VkDeviceAddress blasAddr = fpGetAccelDeviceAddress_(device_, &addrInfo);
 
-        // ── 创建 TLAS（场景实例集合） ──────────────────────────────────────
-        VkAccelerationStructureInstanceKHR instance{};
-        instance.transform.matrix[0][0] = 1.0f; // 单位矩阵
-        instance.transform.matrix[1][1] = 1.0f;
-        instance.transform.matrix[2][2] = 1.0f;
-        instance.instanceCustomIndex = 0;
-        instance.mask = 0xFF;
-        instance.instanceShaderBindingTableRecordOffset = 0;
-        instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
-        instance.accelerationStructureReference = blasAddr;
+        // ── 构建 RTIOW 场景实例 + 材质数据 ─────────────────────────────────
+        std::vector<VkAccelerationStructureInstanceKHR> instances;
+        std::vector<MaterialGPU> materials;
+
+        auto addSphere = [&](float s, float tx, float ty, float tz,
+                             float r, float g, float b, float fw, int type) {
+            MaterialGPU m{};
+            m.albedo[0] = r; m.albedo[1] = g; m.albedo[2] = b; m.albedo[3] = fw;
+            m.type = type;
+            uint32_t matIdx = static_cast<uint32_t>(materials.size());
+            materials.push_back(m);
+
+            VkAccelerationStructureInstanceKHR inst{};
+            inst.transform         = makeTransform(s, tx, ty, tz);
+            inst.instanceCustomIndex    = matIdx;
+            inst.mask                   = 0xFF;
+            inst.instanceShaderBindingTableRecordOffset = 0;
+            inst.flags                  = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+            inst.accelerationStructureReference = blasAddr;
+            instances.push_back(inst);
+        };
+
+        // 地面（大球）
+        addSphere(1000.f, 0.f, -1000.f, 0.f,  0.5f, 0.5f, 0.5f, 0.f, 0); // Lambert gray
+        // 三个特写球
+        addSphere(1.f,  0.f, 1.f, 0.f,  0.f, 0.f, 0.f, 1.5f, 2);  // 玻璃
+        addSphere(1.f, -4.f, 1.f, 0.f,  0.4f, 0.2f, 0.1f, 0.f, 0); // Lambert 棕
+        addSphere(1.f,  4.f, 1.f, 0.f,  0.7f, 0.6f, 0.5f, 0.f, 1); // Metal 金
+
+        // 随机小球（RTIOW 风格，11x11 网格）
+        int seed = 0;
+        for (int a = -11; a < 11; ++a) {
+            for (int b = -11; b < 11; ++b) {
+                float cx = a + 0.9f * ihash(seed++);
+                float cy = 0.2f;
+                float cz = b + 0.9f * ihash(seed++);
+                // 跳过与三个特写球重叠的位置
+                auto d = [](float x, float z, float ox, float oz) {
+                    float dx = x - ox, dz = z - oz;
+                    return std::sqrt(dx*dx + dz*dz);
+                };
+                if (d(cx, cz, 0.f, 0.f) < 1.3f) continue;
+                if (d(cx, cz,-4.f, 0.f) < 1.3f) continue;
+                if (d(cx, cz, 4.f, 0.f) < 1.3f) continue;
+
+                float choose = ihash(seed++);
+                if (choose < 0.7f) { // 漫反射
+                    float r1 = ihash(seed++); float r2 = ihash(seed++);
+                    float g1 = ihash(seed++); float g2 = ihash(seed++);
+                    float b1 = ihash(seed++); float b2 = ihash(seed++);
+                    addSphere(0.2f, cx, cy, cz, r1*r2, g1*g2, b1*b2, 0.f, 0);
+                } else if (choose < 0.9f) { // 金属
+                    float r = 0.5f + 0.5f * ihash(seed++);
+                    float g = 0.5f + 0.5f * ihash(seed++);
+                    float b2= 0.5f + 0.5f * ihash(seed++);
+                    float fuzz = 0.5f * ihash(seed++);
+                    addSphere(0.2f, cx, cy, cz, r, g, b2, fuzz, 1);
+                } else { // 玻璃
+                    addSphere(0.2f, cx, cy, cz, 1.f, 1.f, 1.f, 1.5f, 2);
+                }
+            }
+        }
+
+        uint32_t numInstances = static_cast<uint32_t>(instances.size());
 
         // 实例数据缓冲
         VkBuffer instanceBuf;
         VkDeviceMemory instanceMem;
-        createBufferForAS(sizeof(instance),
+        VkDeviceSize instBytes = numInstances * sizeof(VkAccelerationStructureInstanceKHR);
+        createBufferForAS(instBytes,
                           VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT |
                               VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
-                          &instance,
-                          sizeof(instance),
-                          instanceBuf,
-                          instanceMem);
+                          instances.data(), instBytes, instanceBuf, instanceMem);
 
         VkAccelerationStructureGeometryKHR tlasGeom{};
         tlasGeom.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -569,7 +687,6 @@ class Ch20App {
         tlasInfo.geometryCount = 1;
         tlasInfo.pGeometries = &tlasGeom;
 
-        uint32_t numInstances = 1;
         fpGetAccelBuildSizes_(
             device_, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &tlasInfo, &numInstances, &sizeInfo);
 
@@ -604,6 +721,12 @@ class Ch20App {
         fpCmdBuildAccelStructures_(cmd, 1, &tlasInfo, &pTlasRange);
         endSingleTimeCommands(cmd);
 
+        // ── 材质 SSBO ────────────────────────────────────────────────────
+        VkDeviceSize matBytes = materials.size() * sizeof(MaterialGPU);
+        createBufferForAS(matBytes,
+                          VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                          materials.data(), matBytes, materialBuffer_, materialMemory_);
+
         // 清理临时缓冲
         vkDestroyBuffer(device_, vertBuf, nullptr);
         vkFreeMemory(device_, vertMem, nullptr);
@@ -616,7 +739,7 @@ class Ch20App {
         vkDestroyBuffer(device_, scratchBuf2, nullptr);
         vkFreeMemory(device_, scratchMem2, nullptr);
 
-        std::cout << "✅ 加速结构构建完成（BLAS: 1 个三角形，TLAS: 1 个实例）\n";
+        std::cout << "✅ 加速结构构建完成（BLAS: 单位球体，TLAS: " << numInstances << " 个球体实例）\n";
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -624,55 +747,270 @@ class Ch20App {
     // ═══════════════════════════════════════════════════════════════════════
 
     void createRTPipeline() {
-        // 三个着色器阶段（需要对应的 .rgen/.rmiss/.rchit SPIR-V 文件）
-        // 此处省略实际着色器加载（需要支持 SPIR-V 1.4 的编译器）
-        // glslc --target-env=vulkan1.2 shader.rgen -o shader.rgen.spv
+        // ── 描述符集布局：binding 0=TLAS, 1=存储图像, 2=材质SSBO, 3=累积图像 ─
+        std::array<VkDescriptorSetLayoutBinding, 4> bindings{};
+        bindings[0].binding         = 0;
+        bindings[0].descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        bindings[1].binding         = 1;
+        bindings[1].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+        bindings[2].binding         = 2;
+        bindings[2].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        bindings[2].descriptorCount = 1;
+        bindings[2].stageFlags      = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        bindings[3].binding         = 3;
+        bindings[3].descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        bindings[3].descriptorCount = 1;
+        bindings[3].stageFlags      = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
-        // 示意代码（实际运行需要准备着色器文件）
-        std::cout << "  → ray_gen.rgen.spv（光线生成着色器）\n";
-        std::cout << "  → miss.rmiss.spv（未命中着色器）\n";
-        std::cout << "  → closest_hit.rchit.spv（命中着色器）\n";
+        VkDescriptorSetLayoutCreateInfo dslCI{};
+        dslCI.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        dslCI.bindingCount = static_cast<uint32_t>(bindings.size());
+        dslCI.pBindings    = bindings.data();
+        VK_CHECK(vkCreateDescriptorSetLayout(device_, &dslCI, nullptr, &rtDescSetLayout_));
 
-        // 管线布局（含 TLAS 描述符 + 输出图像）
+        // ── 描述符池 ──────────────────────────────────────────────────────
+        std::array<VkDescriptorPoolSize, 3> poolSizes{};
+        poolSizes[0] = {VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1};
+        poolSizes[1] = {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2};  // outputImage + accumImage
+        poolSizes[2] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1};
+        VkDescriptorPoolCreateInfo poolCI{};
+        poolCI.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolCI.maxSets       = 1;
+        poolCI.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolCI.pPoolSizes    = poolSizes.data();
+        VK_CHECK(vkCreateDescriptorPool(device_, &poolCI, nullptr, &rtDescPool_));
+
+        VkDescriptorSetAllocateInfo dsAI{};
+        dsAI.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        dsAI.descriptorPool     = rtDescPool_;
+        dsAI.descriptorSetCount = 1;
+        dsAI.pSetLayouts        = &rtDescSetLayout_;
+        VK_CHECK(vkAllocateDescriptorSets(device_, &dsAI, &rtDescSet_));
+
+        // ── 写入描述符：TLAS ──────────────────────────────────────────────
+        VkWriteDescriptorSetAccelerationStructureKHR asWrite{};
+        asWrite.sType                      = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+        asWrite.accelerationStructureCount = 1;
+        asWrite.pAccelerationStructures    = &tlas_;
+
+        VkWriteDescriptorSet wTlas{};
+        wTlas.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wTlas.pNext           = &asWrite;
+        wTlas.dstSet          = rtDescSet_;
+        wTlas.dstBinding      = 0;
+        wTlas.descriptorCount = 1;
+        wTlas.descriptorType  = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+
+        // ── 写入描述符：存储图像 ──────────────────────────────────────────
+        VkDescriptorImageInfo imgInfo{};
+        imgInfo.imageView   = rtOutputView_;
+        imgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        VkWriteDescriptorSet wImg{};
+        wImg.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wImg.dstSet          = rtDescSet_;
+        wImg.dstBinding      = 1;
+        wImg.descriptorCount = 1;
+        wImg.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        wImg.pImageInfo      = &imgInfo;
+
+        // ── 写入描述符：材质 SSBO ─────────────────────────────────────────
+        VkDescriptorBufferInfo bufInfo{};
+        bufInfo.buffer = materialBuffer_;
+        bufInfo.offset = 0;
+        bufInfo.range  = VK_WHOLE_SIZE;
+
+        VkWriteDescriptorSet wMat{};
+        wMat.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wMat.dstSet          = rtDescSet_;
+        wMat.dstBinding      = 2;
+        wMat.descriptorCount = 1;
+        wMat.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        wMat.pBufferInfo     = &bufInfo;
+
+        // ── 写入描述符：累积图像 ──────────────────────────────────────────
+        VkDescriptorImageInfo accumImgInfo{};
+        accumImgInfo.imageView   = accumView_;
+        accumImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+        VkWriteDescriptorSet wAccum{};
+        wAccum.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        wAccum.dstSet          = rtDescSet_;
+        wAccum.dstBinding      = 3;
+        wAccum.descriptorCount = 1;
+        wAccum.descriptorType  = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        wAccum.pImageInfo      = &accumImgInfo;
+
+        std::array<VkWriteDescriptorSet, 4> writes = {wTlas, wImg, wMat, wAccum};
+        vkUpdateDescriptorSets(device_, static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+
+        // ── 管线布局（含 push constant：frameAccum） ──────────────────────
+        VkPushConstantRange pcRange{};
+        pcRange.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+        pcRange.offset     = 0;
+        pcRange.size       = sizeof(uint32_t);
+
         VkPipelineLayoutCreateInfo pli{};
-        pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pli.setLayoutCount         = 1;
+        pli.pSetLayouts            = &rtDescSetLayout_;
+        pli.pushConstantRangeCount = 1;
+        pli.pPushConstantRanges    = &pcRange;
         VK_CHECK(vkCreatePipelineLayout(device_, &pli, nullptr, &rtPipelineLayout_));
 
-        // Shader Group 定义了 SBT 中每一槽对应哪些着色器
-        std::array<VkRayTracingShaderGroupCreateInfoKHR, 3> groups{};
-        // Group 0: Ray Generation
-        groups[0].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-        groups[0].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-        groups[0].generalShader = 0; // 着色器索引 0 = rgen
-        groups[0].closestHitShader = VK_SHADER_UNUSED_KHR;
-        groups[0].anyHitShader = VK_SHADER_UNUSED_KHR;
-        groups[0].intersectionShader = VK_SHADER_UNUSED_KHR;
-        // Group 1: Miss
-        groups[1] = groups[0];
-        groups[1].generalShader = 1; // 着色器索引 1 = rmiss
-        // Group 2: Closest Hit
-        groups[2].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-        groups[2].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-        groups[2].generalShader = VK_SHADER_UNUSED_KHR;
-        groups[2].closestHitShader = 2; // 着色器索引 2 = rchit
-        groups[2].anyHitShader = VK_SHADER_UNUSED_KHR;
-        groups[2].intersectionShader = VK_SHADER_UNUSED_KHR;
+        // ── 加载着色器模块 ────────────────────────────────────────────────
+        VkShaderModule rgenMod  = createShaderModuleFromFile(device_, "ray_gen.rgen.spv");
+        VkShaderModule missMod  = createShaderModuleFromFile(device_, "miss.rmiss.spv");
+        VkShaderModule rchitMod = createShaderModuleFromFile(device_, "closest_hit.rchit.spv");
 
-        std::cout << "✅ 光线追踪管线着色器组：\n";
-        std::cout << "   Group 0: Ray Generation（每像素发射光线）\n";
-        std::cout << "   Group 1: Miss（未命中 → 天空颜色）\n";
-        std::cout << "   Group 2: Closest Hit（命中 → 计算光照）\n";
+        // ── 着色器阶段（顺序与 Shader Group 索引对应） ────────────────────
+        std::array<VkPipelineShaderStageCreateInfo, 3> stages{};
+        stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr, 0, VK_SHADER_STAGE_RAYGEN_BIT_KHR,  rgenMod,  "main", nullptr};
+        stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr, 0, VK_SHADER_STAGE_MISS_BIT_KHR,    missMod,  "main", nullptr};
+        stages[2] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                     nullptr, 0, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, rchitMod, "main", nullptr};
+
+        // ── Shader Groups（SBT 槽） ────────────────────────────────────────
+        // Group 0 → rgen  (GENERAL)
+        // Group 1 → rmiss (GENERAL)
+        // Group 2 → rchit (TRIANGLES_HIT_GROUP)
+        std::array<VkRayTracingShaderGroupCreateInfoKHR, 3> groups{};
+        for (auto& g : groups) {
+            g.sType              = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            g.generalShader      = VK_SHADER_UNUSED_KHR;
+            g.closestHitShader   = VK_SHADER_UNUSED_KHR;
+            g.anyHitShader       = VK_SHADER_UNUSED_KHR;
+            g.intersectionShader = VK_SHADER_UNUSED_KHR;
+        }
+        groups[0].type          = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        groups[0].generalShader = 0;
+        groups[1].type          = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        groups[1].generalShader = 1;
+        groups[2].type             = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+        groups[2].closestHitShader = 2;
+
+        // ── 创建光线追踪管线 ──────────────────────────────────────────────
+        VkRayTracingPipelineCreateInfoKHR rtpCI{};
+        rtpCI.sType                        = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+        rtpCI.stageCount                   = static_cast<uint32_t>(stages.size());
+        rtpCI.pStages                      = stages.data();
+        rtpCI.groupCount                   = static_cast<uint32_t>(groups.size());
+        rtpCI.pGroups                      = groups.data();
+        rtpCI.maxPipelineRayRecursionDepth = 1;
+        rtpCI.layout                       = rtPipelineLayout_;
+
+        VK_CHECK(fpCreateRTPipelines_(device_, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &rtpCI, nullptr, &rtPipeline_));
+
+        vkDestroyShaderModule(device_, rgenMod,  nullptr);
+        vkDestroyShaderModule(device_, missMod,  nullptr);
+        vkDestroyShaderModule(device_, rchitMod, nullptr);
+
+        std::cout << "✅ 光线追踪管线已创建（rgen + miss + closest_hit）\n";
     }
 
     void createShaderBindingTable() {
-        // SBT 是一段缓冲，包含各 ShaderGroup 的句柄
-        // 每个句柄大小 = rtProps.shaderGroupHandleSize（通常 32 字节）
-        // 句柄对齐 = rtProps.shaderGroupHandleAlignment（通常 32 字节）
-        std::cout << "✅ Shader Binding Table（SBT）结构：\n";
-        std::cout << "   [rgen region]  : 1 个句柄（光线生成）\n";
-        std::cout << "   [miss region]  : 1 个句柄（未命中）\n";
-        std::cout << "   [hit region]   : 1 个句柄（命中）\n";
-        std::cout << "   用于 vkCmdTraceRaysKHR 分发光线\n";
+        // 查询光线追踪管线属性（句柄大小、对齐要求）
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProps{};
+        rtProps.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        VkPhysicalDeviceProperties2 props2{};
+        props2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props2.pNext = &rtProps;
+        vkGetPhysicalDeviceProperties2(physicalDevice_, &props2);
+
+        const uint32_t handleSize      = rtProps.shaderGroupHandleSize;
+        const uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
+        // 每条 SBT 记录大小需对齐到 handleAlignment
+        const uint32_t stride = (handleSize + handleAlignment - 1) & ~(handleAlignment - 1);
+        // SBT 基地址需对齐到 shaderGroupBaseAlignment（通常 64 字节）
+        const uint32_t baseAlign = rtProps.shaderGroupBaseAlignment;
+
+        const uint32_t groupCount = 3; // rgen + miss + hit
+        const uint32_t dataSize   = groupCount * handleSize;
+        std::vector<uint8_t> handles(dataSize);
+        VK_CHECK(fpGetRTShaderGroupHandles_(device_, rtPipeline_, 0, groupCount, dataSize, handles.data()));
+
+        // 每个区域各占一个 stride，基地址按 baseAlign 对齐排列
+        const VkDeviceSize rgenOffset = 0;
+        const VkDeviceSize missOffset = (stride + baseAlign - 1) & ~(VkDeviceSize)(baseAlign - 1);
+        const VkDeviceSize hitOffset  = missOffset + ((stride + baseAlign - 1) & ~(VkDeviceSize)(baseAlign - 1));
+        const VkDeviceSize sbtSize    = hitOffset + stride;
+
+        createBuffer(sbtSize,
+                     VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     sbtBuffer_,
+                     sbtMemory_);
+
+        uint8_t* mapped = nullptr;
+        VK_CHECK(vkMapMemory(device_, sbtMemory_, 0, sbtSize, 0, reinterpret_cast<void**>(&mapped)));
+        std::memcpy(mapped + rgenOffset, handles.data() + 0 * handleSize, handleSize);
+        std::memcpy(mapped + missOffset, handles.data() + 1 * handleSize, handleSize);
+        std::memcpy(mapped + hitOffset,  handles.data() + 2 * handleSize, handleSize);
+        vkUnmapMemory(device_, sbtMemory_);
+
+        const VkDeviceAddress sbtAddr = getBufferDeviceAddress(sbtBuffer_);
+        sbtRgen_ = {sbtAddr + rgenOffset, stride, stride};
+        sbtMiss_ = {sbtAddr + missOffset, stride, stride};
+        sbtHit_  = {sbtAddr + hitOffset,  stride, stride};
+        sbtCall_ = {};
+
+        std::cout << "✅ Shader Binding Table 已创建（handleSize=" << handleSize << "B, stride=" << stride << "B）\n";
+    }
+
+    void createAccumImage() {
+        VkImageCreateInfo ci{};
+        ci.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        ci.imageType     = VK_IMAGE_TYPE_2D;
+        ci.extent        = {swapchainExtent_.width, swapchainExtent_.height, 1};
+        ci.mipLevels     = 1;
+        ci.arrayLayers   = 1;
+        ci.format        = VK_FORMAT_R32G32B32A32_SFLOAT;
+        ci.tiling        = VK_IMAGE_TILING_OPTIMAL;
+        ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        ci.usage         = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        ci.samples       = VK_SAMPLE_COUNT_1_BIT;
+        VK_CHECK(vkCreateImage(device_, &ci, nullptr, &accumImage_));
+
+        VkMemoryRequirements mr;
+        vkGetImageMemoryRequirements(device_, accumImage_, &mr);
+        VkMemoryAllocateInfo ai{};
+        ai.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        ai.allocationSize  = mr.size;
+        ai.memoryTypeIndex = findMemoryType(mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        VK_CHECK(vkAllocateMemory(device_, &ai, nullptr, &accumMemory_));
+        VK_CHECK(vkBindImageMemory(device_, accumImage_, accumMemory_, 0));
+
+        VkImageViewCreateInfo vci{};
+        vci.sType            = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vci.image            = accumImage_;
+        vci.viewType         = VK_IMAGE_VIEW_TYPE_2D;
+        vci.format           = VK_FORMAT_R32G32B32A32_SFLOAT;
+        vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        VK_CHECK(vkCreateImageView(device_, &vci, nullptr, &accumView_));
+
+        // 初始化布局：UNDEFINED → GENERAL
+        VkCommandBuffer cmd = beginSingleTimeCommands();
+        VkImageMemoryBarrier b{};
+        b.sType               = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        b.oldLayout           = VK_IMAGE_LAYOUT_UNDEFINED;
+        b.newLayout           = VK_IMAGE_LAYOUT_GENERAL;
+        b.image               = accumImage_;
+        b.subresourceRange    = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        b.srcAccessMask       = 0;
+        b.dstAccessMask       = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+        b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        vkCmdPipelineBarrier(cmd,
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                             0, 0, nullptr, 0, nullptr, 1, &b);
+        endSingleTimeCommands(cmd);
     }
 
     void createRTOutputImage() {
@@ -741,19 +1079,21 @@ class Ch20App {
 
         // ── 绑定光线追踪管线 ──────────────────────────────────────────────
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline_);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                rtPipelineLayout_, 0, 1, &rtDescSet_, 0, nullptr);
+        vkCmdPushConstants(cmd, rtPipelineLayout_, VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                           0, sizeof(uint32_t), &accumFrameCount_);
 
         // ── 发射光线！ ─────────────────────────────────────────────────────
         // vkCmdTraceRaysKHR 替代 vkCmdDraw
         // 参数：SBT 各部分的 DeviceAddress + 像素尺寸
-        VkStridedDeviceAddressRegionKHR rgenSBT{}, missSBT{}, hitSBT{}, callSBT{};
-        // （实际使用时填入 SBT 的 DeviceAddress 和 stride）
 
         if (fpCmdTraceRays_) {
             fpCmdTraceRays_(cmd,
-                            &rgenSBT,
-                            &missSBT,
-                            &hitSBT,
-                            &callSBT,
+                            &sbtRgen_,
+                            &sbtMiss_,
+                            &sbtHit_,
+                            &sbtCall_,
                             swapchainExtent_.width,  // 水平像素数
                             swapchainExtent_.height, // 垂直像素数
                             1);                      // depth（通常为1）
@@ -865,6 +1205,7 @@ class Ch20App {
         pi.pImageIndices = &imgIdx;
         vkQueuePresentKHR(presentQueue_, &pi);
         currentFrame_ = (currentFrame_ + 1) % 2;
+        ++accumFrameCount_;
     }
 
     void mainLoop() {
@@ -1105,10 +1446,28 @@ class Ch20App {
             vkDestroyImage(device_, rtOutputImage_, nullptr);
             vkFreeMemory(device_, rtOutputMemory_, nullptr);
         }
+        if (accumView_ != VK_NULL_HANDLE)
+            vkDestroyImageView(device_, accumView_, nullptr);
+        if (accumImage_ != VK_NULL_HANDLE) {
+            vkDestroyImage(device_, accumImage_, nullptr);
+            vkFreeMemory(device_, accumMemory_, nullptr);
+        }
+        if (sbtBuffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device_, sbtBuffer_, nullptr);
+            vkFreeMemory(device_, sbtMemory_, nullptr);
+        }
+        if (materialBuffer_ != VK_NULL_HANDLE) {
+            vkDestroyBuffer(device_, materialBuffer_, nullptr);
+            vkFreeMemory(device_, materialMemory_, nullptr);
+        }
         if (rtPipeline_ != VK_NULL_HANDLE)
             vkDestroyPipeline(device_, rtPipeline_, nullptr);
         if (rtPipelineLayout_ != VK_NULL_HANDLE)
             vkDestroyPipelineLayout(device_, rtPipelineLayout_, nullptr);
+        if (rtDescPool_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorPool(device_, rtDescPool_, nullptr);
+        if (rtDescSetLayout_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device_, rtDescSetLayout_, nullptr);
         for (int i = 0; i < 2; ++i) {
             if (i < (int)imageAvailableSems_.size()) {
                 vkDestroySemaphore(device_, imageAvailableSems_[i], nullptr);
