@@ -34,6 +34,8 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 
+add_subdirectory(external/fmt EXCLUDE_FROM_ALL)
+
 # ─── GLM ──────────────────────────────────────────────────────────────────────
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
@@ -126,7 +128,8 @@ target_include_directories(vulkan_tutorial_common INTERFACE
 target_link_libraries(vulkan_tutorial_common INTERFACE
     Vulkan::Vulkan
     glfw
-    glm::glm)
+    glm::glm
+    fmt::fmt)
 target_compile_definitions(vulkan_tutorial_common INTERFACE
     GLFW_INCLUDE_NONE          # Do not let GLFW include GL headers
     GLM_FORCE_RADIANS
