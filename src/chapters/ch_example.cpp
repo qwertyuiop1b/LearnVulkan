@@ -2,6 +2,9 @@
 #include <cstdlib>
 #include <exception>
 #include <fmt/base.h>
+#include <optional>
+#include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 #include <vulkan/vk_platform.h>
@@ -31,9 +34,11 @@ const bool enable_validation_layers = false;
 const bool enable_validation_layers = true;
 #endif
 
-inline std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"
+inline std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
+inline std::vector<const char*> deviceExtensions = {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #ifdef __APPLE__
-                                                    "VK_KHR_portability_subset"
+    "VK_KHR_portability_subset",
 #endif
 };
 
@@ -45,7 +50,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsCallback(VkDebugUtilsMessageSeverityFla
     return VK_FALSE;
 }
 
-VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pMessenger) {
+VkResult CreateDebugUtilsMessengerEXT(VkInstance instance,
+                                      const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                      const VkAllocationCallbacks* pAllocator,
+                                      VkDebugUtilsMessengerEXT* pMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
     if (func != nullptr) {
         return func(instance, pCreateInfo, pAllocator, pMessenger);
@@ -54,12 +62,23 @@ VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMes
     }
 };
 
-void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT messenger, const VkAllocationCallbacks* pAllocator) {
+void DestroyDebugUtilsMessengerEXT(VkInstance instance,
+                                   VkDebugUtilsMessengerEXT messenger,
+                                   const VkAllocationCallbacks* pAllocator) {
     auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
     if (func != nullptr) {
         func(instance, messenger, pAllocator);
     }
 }
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicFamily;
+    std::optional<uint32_t> presentFamily;
+
+    bool isCompleted() const {
+        return graphicFamily.has_value() && presentFamily.has_value();
+    }
+};
 
 class Example {
   public:
@@ -68,8 +87,12 @@ class Example {
         initVulkan();
     }
     ~Example() {
-        DestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
-        vkDestroyInstance(instance, nullptr);
+        if (debugUtilsMessenger != VK_NULL_HANDLE) {
+            DestroyDebugUtilsMessengerEXT(instance, debugUtilsMessenger, nullptr);
+        }
+        if (instance != VK_NULL_HANDLE) {
+            vkDestroyInstance(instance, nullptr);
+        }
         glfwDestroyWindow(window);
         glfwTerminate();
     }
@@ -88,6 +111,11 @@ class Example {
 
     VkInstance instance{VK_NULL_HANDLE};
     VkDebugUtilsMessengerEXT debugUtilsMessenger{VK_NULL_HANDLE};
+    VkSurfaceKHR surface{VK_NULL_HANDLE};
+    VkPhysicalDevice physicalDevice{VK_NULL_HANDLE};
+    VkDevice device{VK_NULL_HANDLE};
+    VkQueue graphicQueue {VK_NULL_HANDLE};
+    VkQueue presentQueue { VK_NULL_HANDLE};
 
     void initWindow() {
         glfwInit();
@@ -115,7 +143,7 @@ class Example {
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         }
 #ifdef __APPLE__
-        extensions.push_back(VK_KHR_PROTABILITY_ENUMERATE_EXTENSION_NAME);
+        extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
         extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 #endif
         return extensions;
@@ -128,7 +156,7 @@ class Example {
             .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
             .pEngineName = "No Engine",
             .engineVersion = VK_MAKE_VERSION(1, 0, 0),
-            .apiVersion = VK_API_VERSION_1_4,
+            .apiVersion = VK_API_VERSION_1_3,
         };
 
         auto extensions = getInstanceExtensions();
@@ -169,7 +197,7 @@ class Example {
     }
 
     void createDebugMessenger() {
-        if (!enable_validation_layers)
+        if (!enable_validation_layers || instance == VK_NULL_HANDLE)
             return;
         auto createInfo = getDebugUtilsCreateInfo();
         if (CreateDebugUtilsMessengerEXT(instance, &createInfo, nullptr, &debugUtilsMessenger) != VK_SUCCESS) {
@@ -177,14 +205,103 @@ class Example {
         }
     }
 
+    void createSurface() {
+        if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create window surface");
+        }
+    }
+
+    QueueFamilyIndices findQueueFamily(VkPhysicalDevice device, VkSurfaceKHR surface) {
+        uint32_t familyCount;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> familyProps(familyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &familyCount, familyProps.data());
+
+        QueueFamilyIndices familyIndices;
+        for (uint32_t i = 0; i < familyCount; i++) {
+            if (!familyIndices.graphicFamily.has_value() && (familyProps[i].queueFlags | VK_QUEUE_GRAPHICS_BIT)) {
+                familyIndices.graphicFamily = i;
+            }
+
+            VkBool32 supported = VK_FALSE;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &supported);
+            if (!familyIndices.presentFamily.has_value() && supported) {
+                familyIndices.presentFamily = i;
+            }
+
+            if (familyIndices.isCompleted())
+                break;
+        }
+        return familyIndices;
+    }
+
+    bool isSuitablePhysicalDevice(VkPhysicalDevice device, VkSurfaceKHR surface) {
+        return findQueueFamily(device, surface).isCompleted();
+    }
+
     void pickPhysicalDevice() {
-        
+        uint32_t deviceCount;
+        vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+        if (deviceCount == 0) {
+            throw std::runtime_error("Failed to find a physical device");
+        }
+        std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+        vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data());
+        for (const auto& physical : physicalDevices) {
+            if (isSuitablePhysicalDevice(physical, surface)) {
+                physicalDevice = physical;
+                break;
+            }
+        }
+
+        if (physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("Failed to find a suitable physical device");
+        }
+    }
+
+    void createLogicalDevice() {
+        QueueFamilyIndices indices = findQueueFamily(physicalDevice, surface);
+        std::set<uint32_t> uniqueIndices{indices.graphicFamily.value(), indices.presentFamily.value()};
+
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        float priority = 1.0f;
+        for (const auto& index : uniqueIndices) {
+            VkDeviceQueueCreateInfo createInfo{
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .queueFamilyIndex = index,
+                .queueCount = 1,
+                .pQueuePriorities = &priority,
+            };
+            queueCreateInfos.push_back(createInfo);
+        }
+
+        VkPhysicalDeviceFeatures features {
+            .samplerAnisotropy = VK_TRUE,
+        };
+        VkDeviceCreateInfo deviceInfo{
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
+            .pQueueCreateInfos = queueCreateInfos.data(),
+            .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
+            .ppEnabledExtensionNames = deviceExtensions.data(),
+            .pEnabledFeatures = &features,
+        };
+
+        if (vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create device!");
+        }
+
+        vkGetDeviceQueue(device, indices.graphicFamily.value(), 0, &graphicQueue);
+        vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
+
     }
 
     void initVulkan() {
         createInstance();
         createDebugMessenger();
+        createSurface();
         pickPhysicalDevice();
+        createLogicalDevice();
     }
 
     void draw() {}
