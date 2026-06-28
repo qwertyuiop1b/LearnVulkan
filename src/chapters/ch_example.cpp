@@ -133,6 +133,9 @@ class Example {
         initVulkan();
     }
     ~Example() {
+        vkDestroySemaphore(device, imageAvaliableSemaphore, nullptr);
+        vkDestroySemaphore(device, renderFinishedSemaphore, nullptr);
+        vkDestroyFence(device, inFlightFence, nullptr);
         vkDestroyCommandPool(device, commandPool, nullptr);
         for (const auto& framebuffer : framebuffers) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
@@ -161,6 +164,7 @@ class Example {
             draw();
             glfwPollEvents();
         }
+        vkDeviceWaitIdle(device);
     }
 
   private:
@@ -177,20 +181,23 @@ class Example {
     VkQueue presentQueue{VK_NULL_HANDLE};
 
     QueueFamilyIndices queueFamilyIndices;
-    VkSwapchainKHR swapchain {VK_NULL_HANDLE};
-    std::vector<VkImage> swapchainImages {};
-    VkFormat imageFormat {};
-    VkExtent2D imageExtent {};
-    std::vector<VkImageView> swapchainImageViews {};
+    VkSwapchainKHR swapchain{VK_NULL_HANDLE};
+    std::vector<VkImage> swapchainImages{};
+    VkFormat imageFormat{};
+    VkExtent2D imageExtent{};
+    std::vector<VkImageView> swapchainImageViews{};
 
-    VkRenderPass renderPass {VK_NULL_HANDLE};
-    VkPipelineLayout pipelineLayout {VK_NULL_HANDLE};
-    VkPipeline graphicPipeline {VK_NULL_HANDLE};
+    VkRenderPass renderPass{VK_NULL_HANDLE};
+    VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+    VkPipeline graphicPipeline{VK_NULL_HANDLE};
 
-    std::vector<VkFramebuffer> framebuffers {};
-    VkCommandPool commandPool {};
-    VkCommandBuffer commandBuffer {};
-    
+    std::vector<VkFramebuffer> framebuffers{};
+    VkCommandPool commandPool{};
+    VkCommandBuffer commandBuffer{};
+
+    VkSemaphore imageAvaliableSemaphore;
+    VkSemaphore renderFinishedSemaphore;
+    VkFence inFlightFence;
 
     void initWindow() {
         glfwInit();
@@ -336,7 +343,8 @@ class Example {
 
     void createLogicalDevice() {
         queueFamilyIndices = findQueueFamily(physicalDevice, surface);
-        std::set<uint32_t> uniqueIndices{queueFamilyIndices.graphicFamily.value(), queueFamilyIndices.presentFamily.value()};
+        std::set<uint32_t> uniqueIndices{queueFamilyIndices.graphicFamily.value(),
+                                         queueFamilyIndices.presentFamily.value()};
 
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         float priority = 1.0f;
@@ -374,7 +382,7 @@ class Example {
         SwapchainSupportedDetails detailInfos;
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &detailInfos.capabilities);
 
-        uint32_t formatCount {};
+        uint32_t formatCount{};
         vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr);
         if (formatCount != 0) {
             detailInfos.formats.resize(formatCount);
@@ -385,7 +393,8 @@ class Example {
         vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, nullptr);
         if (presentModeCount != 0) {
             detailInfos.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, surface, &presentModeCount, detailInfos.presentModes.data());
+            vkGetPhysicalDeviceSurfacePresentModesKHR(
+                physicalDevice, surface, &presentModeCount, detailInfos.presentModes.data());
         }
 
         return detailInfos;
@@ -404,9 +413,9 @@ class Example {
         uint32_t imageCount = supportedDetails.capabilities.minImageCount + 1;
         if (imageCount > supportedDetails.capabilities.maxImageCount) {
             imageCount = supportedDetails.capabilities.maxImageCount;
-        }        
+        }
 
-        VkSwapchainCreateInfoKHR createInfo {
+        VkSwapchainCreateInfoKHR createInfo{
             .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .surface = surface,
             .minImageCount = imageCount,
@@ -448,24 +457,26 @@ class Example {
     void createImageViews() {
         swapchainImageViews.resize(swapchainImages.size());
         for (uint32_t i = 0; i < swapchainImages.size(); i++) {
-            VkImageViewCreateInfo createInfo {
+            VkImageViewCreateInfo createInfo{
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .image = swapchainImages[i],
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
                 .format = imageFormat,
-                .components = {
-                    VK_COMPONENT_SWIZZLE_IDENTITY,
-                    VK_COMPONENT_SWIZZLE_IDENTITY,
-                    VK_COMPONENT_SWIZZLE_IDENTITY,
-                    VK_COMPONENT_SWIZZLE_IDENTITY,
-                },
-                .subresourceRange = {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
+                .components =
+                    {
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                        VK_COMPONENT_SWIZZLE_IDENTITY,
+                    },
+                .subresourceRange =
+                    {
+                        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .baseMipLevel = 0,
+                        .levelCount = 1,
+                        .baseArrayLayer = 0,
+                        .layerCount = 1,
+                    },
             };
             if (vkCreateImageView(device, &createInfo, nullptr, &swapchainImageViews[i]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create image views!");
@@ -474,7 +485,7 @@ class Example {
     }
 
     void createRenderPass() {
-        VkAttachmentDescription attachmentDesc {
+        VkAttachmentDescription attachmentDesc{
             .format = imageFormat,
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -485,28 +496,38 @@ class Example {
             .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         };
 
-        VkAttachmentReference attachmentRef {
+        VkAttachmentReference attachmentRef{
             .attachment = 0,
             .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         };
 
-        VkSubpassDescription subpass {
+        VkSubpassDependency dependency {
+            .srcSubpass = VK_SUBPASS_EXTERNAL,
+            .dstSubpass = 0,
+            .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask = 0,
+            .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        };
+
+        VkSubpassDescription subpass{
             .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
             .colorAttachmentCount = 1,
             .pColorAttachments = &attachmentRef,
         };
 
-        VkRenderPassCreateInfo createInfo {
+        VkRenderPassCreateInfo createInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .subpassCount = 1,
             .pSubpasses = &subpass,
             .attachmentCount = 1,
             .pAttachments = &attachmentDesc,
+            .dependencyCount = 1,
+            .pDependencies = &dependency,
         };
         if (vkCreateRenderPass(device, &createInfo, nullptr, &renderPass) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create renderpass!");
         }
-
     }
 
     static std::vector<char> readFile(const std::string& filepath) {
@@ -524,8 +545,8 @@ class Example {
 
     VkShaderModule createShaderModule(const std::string& shaderPath) {
         auto shaderCode = readFile(shaderPath);
-        VkShaderModule shaderModule {VK_NULL_HANDLE};
-        VkShaderModuleCreateInfo createInfo {
+        VkShaderModule shaderModule{VK_NULL_HANDLE};
+        VkShaderModuleCreateInfo createInfo{
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .codeSize = shaderCode.size(),
             .pCode = reinterpret_cast<uint32_t*>(shaderCode.data()),
@@ -541,23 +562,23 @@ class Example {
         VkShaderModule vertexShaderModule = createShaderModule("shaders/triangle.vert.spv");
         VkShaderModule fragmentShaderModule = createShaderModule("shaders/triangle.frag.spv");
 
-        VkPipelineShaderStageCreateInfo vertexStageCreateInfo {
+        VkPipelineShaderStageCreateInfo vertexStageCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_VERTEX_BIT,
             .module = vertexShaderModule,
             .pName = "main",
         };
 
-        VkPipelineShaderStageCreateInfo fragmentStageCreateInfo {
+        VkPipelineShaderStageCreateInfo fragmentStageCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
             .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
             .module = fragmentShaderModule,
             .pName = "main",
         };
-        
+
         VkPipelineShaderStageCreateInfo shaderStages[] = {vertexStageCreateInfo, fragmentStageCreateInfo};
 
-        VkPipelineVertexInputStateCreateInfo vertexInputState {
+        VkPipelineVertexInputStateCreateInfo vertexInputState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             .vertexBindingDescriptionCount = 0,
             .pVertexBindingDescriptions = nullptr,
@@ -565,44 +586,46 @@ class Example {
             .pVertexAttributeDescriptions = nullptr,
         };
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyState {
+        VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
             .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
             .primitiveRestartEnable = VK_FALSE,
         };
 
-        VkViewport viewport {
-            .x = 0,
-            .y = 0,
-            .width = (float)imageExtent.width,
-            .height = (float)imageExtent.height,
-            .minDepth = 0.f,
-            .maxDepth = 1.f
-        };
-        VkRect2D scissor {
-            .offset = {0, 0,},
+        VkViewport viewport{.x = 0,
+                            .y = 0,
+                            .width = (float)imageExtent.width,
+                            .height = (float)imageExtent.height,
+                            .minDepth = 0.f,
+                            .maxDepth = 1.f};
+        VkRect2D scissor{
+            .offset =
+                {
+                    0,
+                    0,
+                },
             .extent = imageExtent,
         };
         std::vector<VkDynamicState> dynamicStates = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        VkPipelineDynamicStateCreateInfo dynamicState {
+        VkPipelineDynamicStateCreateInfo dynamicState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
             .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()),
             .pDynamicStates = dynamicStates.data(),
         };
 
-        VkPipelineViewportStateCreateInfo viewportState {
+        VkPipelineViewportStateCreateInfo viewportState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
             .viewportCount = 1,
             .scissorCount = 1,
         };
 
-        VkPipelineRasterizationStateCreateInfo rasterState {
+        VkPipelineRasterizationStateCreateInfo rasterState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
             .rasterizerDiscardEnable = VK_FALSE,
             .polygonMode = VK_POLYGON_MODE_FILL,
             .depthClampEnable = VK_FALSE,
             .cullMode = VK_CULL_MODE_BACK_BIT,
-            .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            .frontFace = VK_FRONT_FACE_CLOCKWISE,
             .lineWidth = 1.0,
             .depthBiasEnable = VK_FALSE,
             .depthBiasClamp = 0.f,
@@ -610,7 +633,7 @@ class Example {
             .depthBiasSlopeFactor = 0.f,
         };
 
-        VkPipelineMultisampleStateCreateInfo multisampleState {
+        VkPipelineMultisampleStateCreateInfo multisampleState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
             .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
             .sampleShadingEnable = VK_FALSE,
@@ -619,9 +642,10 @@ class Example {
             .alphaToOneEnable = VK_FALSE,
         };
 
-        VkPipelineColorBlendAttachmentState colorAttachmentState {
+        VkPipelineColorBlendAttachmentState colorAttachmentState{
             .blendEnable = VK_FALSE,
-            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+            .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+                              VK_COLOR_COMPONENT_A_BIT,
             .colorBlendOp = VK_BLEND_OP_ADD,
             .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
             .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
@@ -630,15 +654,15 @@ class Example {
             .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
         };
 
-        VkPipelineColorBlendStateCreateInfo colorBlendState {
+        VkPipelineColorBlendStateCreateInfo colorBlendState{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
             .logicOpEnable = VK_FALSE,
             .attachmentCount = 1,
             .pAttachments = &colorAttachmentState,
-            .blendConstants = { 0.f, 0.f, 0.f, 0.f},
+            .blendConstants = {0.f, 0.f, 0.f, 0.f},
         };
 
-        VkPipelineLayoutCreateInfo layoutCreateInfo {
+        VkPipelineLayoutCreateInfo layoutCreateInfo{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = 0,
             .pSetLayouts = nullptr,
@@ -650,7 +674,7 @@ class Example {
             throw std::runtime_error("Failed ot create pipeline layout!");
         }
 
-        VkGraphicsPipelineCreateInfo pipelineCreateInfo {
+        VkGraphicsPipelineCreateInfo pipelineCreateInfo{
             .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
             .stageCount = 2,
             .pStages = shaderStages,
@@ -667,7 +691,8 @@ class Example {
             .basePipelineHandle = VK_NULL_HANDLE,
             .basePipelineIndex = -1,
         };
-        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &graphicPipeline) != VK_SUCCESS) {
+        if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineCreateInfo, nullptr, &graphicPipeline) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to create graphic pipeline!");
         }
 
@@ -678,7 +703,7 @@ class Example {
     void createFramebuffers() {
         framebuffers.resize(swapchainImages.size());
         for (uint32_t i = 0; i < framebuffers.size(); i++) {
-            VkFramebufferCreateInfo createInfo {
+            VkFramebufferCreateInfo createInfo{
                 .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
                 .attachmentCount = 1,
                 .pAttachments = &swapchainImageViews[i],
@@ -686,7 +711,7 @@ class Example {
                 .height = imageExtent.height,
                 .layers = 1,
                 .renderPass = renderPass,
-            
+
             };
             if (vkCreateFramebuffer(device, &createInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
                 throw std::runtime_error("Failed to create framebuffer!");
@@ -695,7 +720,7 @@ class Example {
     }
 
     void createCommandPool() {
-        VkCommandPoolCreateInfo createInfo {
+        VkCommandPoolCreateInfo createInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             .queueFamilyIndex = queueFamilyIndices.graphicFamily.value(),
@@ -706,7 +731,7 @@ class Example {
     }
 
     void createCommandBuffers() {
-        VkCommandBufferAllocateInfo allocInfo {
+        VkCommandBufferAllocateInfo allocInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .commandPool = commandPool,
             .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -718,7 +743,7 @@ class Example {
     }
 
     void recordCommandBuffers(VkCommandBuffer cmdBuf, uint32_t index) {
-        VkCommandBufferBeginInfo beginInfo {
+        VkCommandBufferBeginInfo beginInfo{
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
             .flags = 0,
             .pInheritanceInfo = nullptr,
@@ -727,20 +752,21 @@ class Example {
             throw std::runtime_error("Failed to begin command buffer!");
         }
         VkClearValue clearColor = {{0.f, 0.f, 0.f, 1.0f}};
-        VkRenderPassBeginInfo renderPassInfo {
+        VkRenderPassBeginInfo renderPassInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass,
-            .renderArea = {
-                .offset = {0, 0},
-                .extent = imageExtent,
-            },
+            .renderArea =
+                {
+                    .offset = {0, 0},
+                    .extent = imageExtent,
+                },
             .framebuffer = framebuffers[index],
             .clearValueCount = 1,
             .pClearValues = &clearColor,
         };
         vkCmdBeginRenderPass(cmdBuf, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdBindPipeline(cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicPipeline);
-        VkViewport viewport {
+        VkViewport viewport{
             .x = 0,
             .y = 0,
             .width = static_cast<float>(imageExtent.width),
@@ -761,6 +787,21 @@ class Example {
         }
     }
 
+    void createSyncObjects() {
+        VkSemaphoreCreateInfo semaphoreCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
+        VkFenceCreateInfo fenceCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+            .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+        };
+        if (vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &imageAvaliableSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreCreateInfo, nullptr, &renderFinishedSemaphore) != VK_SUCCESS ||
+            vkCreateFence(device, &fenceCreateInfo, nullptr, &inFlightFence) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create semaphore or fence");
+        }
+    }
+
     void initVulkan() {
         createInstance();
         createDebugMessenger();
@@ -774,9 +815,50 @@ class Example {
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
+        createSyncObjects();
     }
 
-    void draw() {}
+    void draw() {
+        vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX);
+        vkResetFences(device, 1, &inFlightFence);
+
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvaliableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+        vkResetCommandBuffer(commandBuffer, 0);
+        recordCommandBuffers(commandBuffer, imageIndex);
+
+        VkSemaphore waitSemahores[] = { imageAvaliableSemaphore };
+        VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+        VkSubmitInfo submitInfo {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &commandBuffer,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = waitSemahores,
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = signalSemaphores,
+            .pWaitDstStageMask = waitStages,
+        };
+        if (vkQueueSubmit(graphicQueue, 1, &submitInfo, inFlightFence) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to submit draw command buffer!");
+        }
+
+        VkPresentInfoKHR presentInfo {
+            .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = signalSemaphores,
+            .swapchainCount = 1,
+            .pSwapchains = &swapchain,
+            .pImageIndices = &imageIndex,
+            .pResults = nullptr,
+        };
+        if (vkQueuePresentKHR(graphicQueue, &presentInfo) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to present!");
+        }
+        
+    }
 };
 
 int main() {
