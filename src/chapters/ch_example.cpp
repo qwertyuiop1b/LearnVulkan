@@ -160,9 +160,14 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}},
     {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
     {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+};
+
+const std::vector<uint16_t> indices = {
+    0, 1, 2, 2, 3, 0,
 };
 
 class Example {
@@ -174,6 +179,8 @@ class Example {
     ~Example() {
         cleanupSwapchain();
         cleanupRenderFinishedSemaphores();
+        vkDestroyBuffer(device, indexBuffer, nullptr);
+        vkFreeMemory(device, indexBufferMemory, nullptr);
         vkDestroyBuffer(device, vertexBuffer, nullptr);
         vkFreeMemory(device, vertexBufferMemory, nullptr);
         for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -244,6 +251,8 @@ class Example {
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+    VkBuffer indexBuffer;
+    VkDeviceMemory indexBufferMemory;
 
     void initWindow() {
         glfwInit();
@@ -347,7 +356,7 @@ class Example {
 
         QueueFamilyIndices familyIndices;
         for (uint32_t i = 0; i < familyCount; i++) {
-            if (!familyIndices.graphicFamily.has_value() && (familyProps[i].queueFlags | VK_QUEUE_GRAPHICS_BIT)) {
+            if (!familyIndices.graphicFamily.has_value() && (familyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)) {
                 familyIndices.graphicFamily = i;
             }
 
@@ -880,6 +889,23 @@ class Example {
         vkFreeMemory(device, stagingMemory, nullptr);
     }
 
+    void createIndexBuffer() {
+        VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingMemory;
+        createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingMemory);
+        void* data;
+        vkMapMemory(device, stagingMemory, 0, bufferSize, 0, &data);
+        memcpy(data, indices.data(), bufferSize);
+        vkUnmapMemory(device, stagingMemory);
+
+        createBuffer(bufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer, indexBufferMemory);
+        copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingMemory, nullptr);
+    }
+
     void createCommandBuffers() {
         commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         VkCommandBufferAllocateInfo allocInfo{
@@ -922,6 +948,7 @@ class Example {
         VkBuffer vertexBuffers[] = {vertexBuffer};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(cmdBuf, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(cmdBuf, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
         VkViewport viewport{
             .x = 0,
             .y = 0,
@@ -936,7 +963,8 @@ class Example {
         };
         vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
-        vkCmdDraw(cmdBuf, vertices.size(), 1, 0, 0);
+        // vkCmdDraw(cmdBuf, vertices.size(), 1, 0, 0);
+        vkCmdDrawIndexed(cmdBuf, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
         vkCmdEndRenderPass(cmdBuf);
         if (vkEndCommandBuffer(cmdBuf) != VK_SUCCESS) {
             throw std::runtime_error("Failed to end command buffer!");
@@ -996,6 +1024,7 @@ class Example {
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
+        createIndexBuffer();
         createCommandBuffers();
         createSyncObjects();
     }
