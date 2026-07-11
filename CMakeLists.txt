@@ -80,6 +80,20 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/shaders/mesh_basic.mesh")
     endif()
 endif()
 
+# ─── Copy runtime assets once ────────────────────────────────────────────────
+file(GLOB_RECURSE ASSET_FILES CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/assets/*")
+set(ASSET_STAMP "${CMAKE_BINARY_DIR}/CMakeFiles/assets.stamp")
+add_custom_command(
+    OUTPUT "${ASSET_STAMP}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets"
+            "${CMAKE_BINARY_DIR}/assets"
+    COMMAND ${CMAKE_COMMAND} -E touch "${ASSET_STAMP}"
+    DEPENDS ${ASSET_FILES}
+    COMMENT "Copying runtime assets")
+add_custom_target(vulkan_tutorial_copy_assets ALL DEPENDS "${ASSET_STAMP}")
+
 # ─── Compile shaders helper ───────────────────────────────────────────────────
 function(compile_shaders TARGET)
     set(SHADER_DIR "${CMAKE_SOURCE_DIR}/shaders")

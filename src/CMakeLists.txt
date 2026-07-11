@@ -1,5 +1,5 @@
 add_executable(ch_example chapters/ch_example.cpp)
-target_link_libraries(ch_example PRIVATE vulkan_tutorial_common)
+target_link_libraries(ch_example PRIVATE vulkan_tutorial_common vulkan_tutorial_assets)
 
 add_executable(ch00_start chapters/ch00_start.cpp)
 target_link_libraries(ch00_start PRIVATE vulkan_tutorial_common)
