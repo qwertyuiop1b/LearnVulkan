@@ -1,0 +1,7 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(set=0,binding=1,std430) buffer Commands { uint commandWords[]; } commands;
+layout(set=0,binding=2,std430) buffer DrawCount { uint drawCount; } drawCount;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){ uint id=gl_GlobalInvocationID.x; if(id>=1024u)return; float f=float(id); float depth=fract(f*.618+pc.p[0].z*.04); float lod=clamp(floor(depth*5.),0.,4.); float visible=step(.18,fract(f*.173+pc.p[0].z*.02)); float bucket=mod(f,8.); data.values[id]=vec4(visible,lod,bucket,depth); commands.commandWords[id*4u+0u]=3u; commands.commandWords[id*4u+1u]=uint(visible); commands.commandWords[id*4u+2u]=0u; commands.commandWords[id*4u+3u]=id; if(id==0u)drawCount.drawCount=1024u; }

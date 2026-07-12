@@ -175,6 +175,18 @@ Compute/Graphics 管线和可见三维输出。
 | ch116 | Render Graph 2.0 | DAG / Pass Culling / 资源生命周期别名 |
 | ch117 | Shader/Pipeline 工具链 | SPIR-V 反射 / 热重载 / Pipeline Cache |
 | ch118 | GPU Profiling 2.0 | Timestamp Query / Calibrated 能力 / 帧统计 |
+| ch119 | Reverse-Z 与 Hi-Z | Reverse-Z / 无限远投影 / 深度金字塔可见性 |
+| ch120 | GPU 并行算法 | Reduction / Prefix Scan / Stream Compaction / Radix |
+| ch121 | 生产级 GPU Driven | GPU 可见性 / LOD / 材质分桶 / Hi-Z 数据 |
+| ch122 | Meshlet | Cone / Frustum / Hi-Z 剔除 / Raster 回退 |
+| ch123 | 时域渲染基础 | Jitter / Motion Vector / Reprojection / Reactive Mask |
+| ch124 | TAAU 与动态分辨率 | 历史重建 / Render Scale / 锐化 |
+| ch125 | Ray Query 混合渲染 | RT Shadow / RTAO / Hybrid Reflection / 回退 |
+| ch126 | 光追降噪与 GI | SVGF / A-Trous / DDGI / ReSTIR GI |
+| ch127 | 高级阴影 | EVSM / MSM / Point Atlas / Virtual Shadow |
+| ch128 | 体积与流体 | Froxel / 体积云 / FFT 海洋 / 焦散 |
+| ch129 | 高级材质 | Clearcoat / Transmission / Sheen / Anisotropy / Iridescence |
+| ch130 | 资产管线 | KTX2/BasisU / BC-ASTC-ETC2 / meshopt / glTF |
 
 ---
 

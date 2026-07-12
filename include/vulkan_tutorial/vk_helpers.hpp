@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <set>
 #include <vector>
 
@@ -247,10 +248,25 @@ inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
     supported12.pNext = &supported13;
     vkGetPhysicalDeviceFeatures2(physicalDevice, &supportedFeatures);
 
+    bool supportsPresentId = false;
+    bool supportsPresentWait = false;
+    uint32_t optionalExtensionCount = 0;
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &optionalExtensionCount, nullptr);
+    std::vector<VkExtensionProperties> optionalExtensions(optionalExtensionCount);
+    vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &optionalExtensionCount, optionalExtensions.data());
+    for (const auto& extension : optionalExtensions) {
+        supportsPresentId |= std::strcmp(extension.extensionName, VK_KHR_PRESENT_ID_EXTENSION_NAME) == 0;
+        supportsPresentWait |= std::strcmp(extension.extensionName, VK_KHR_PRESENT_WAIT_EXTENSION_NAME) == 0;
+    }
     VkPhysicalDeviceVulkan12Features enabled12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
     enabled12.timelineSemaphore = supported12.timelineSemaphore;
     VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     enabled13.synchronization2 = supported13.synchronization2;
+    VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR};
+    if (supportsPresentId) {
+        presentIdFeatures.presentId = VK_TRUE;
+        enabled13.pNext = &presentIdFeatures;
+    }
     enabled12.pNext = &enabled13;
     VkPhysicalDeviceFeatures2 enabledFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
     enabledFeatures.features = features;
@@ -262,8 +278,11 @@ inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.pNext = &enabledFeatures;
     createInfo.pEnabledFeatures = nullptr;
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
-    createInfo.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
+    std::vector<const char*> enabledExtensions(DEVICE_EXTENSIONS.begin(), DEVICE_EXTENSIONS.end());
+    if (supportsPresentId) enabledExtensions.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+    if (supportsPresentWait) enabledExtensions.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+    createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
+    createInfo.ppEnabledExtensionNames = enabledExtensions.data();
     if (ENABLE_VALIDATION_LAYERS) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
         createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();

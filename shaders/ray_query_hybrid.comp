@@ -1,0 +1,5 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){uint id=gl_GlobalInvocationID.x;if(id>=1024u)return;float x=float(id)/1023.;float shadow=smoothstep(.2,.85,.5+.5*sin(x*16.+pc.p[0].z));float ao=.55+.45*sin(x*8.+1.4);float reflection=.5+.5*cos(x*13.-pc.p[0].z*.3);data.values[id]=vec4(shadow,ao,reflection,pc.p[1].x);}

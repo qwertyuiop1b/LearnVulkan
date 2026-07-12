@@ -54,6 +54,8 @@ class AdvancedGpuChapterApp : public DemoApp {
     virtual int32_t indirectDrawBufferIndex() const {
         return -1;
     }
+    virtual int32_t indirectDrawCountBufferIndex() const { return -1; }
+    virtual uint32_t indirectMaxDrawCount() const { return 1; }
     virtual VkPrimitiveTopology primitiveTopology() const {
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     }
@@ -183,7 +185,12 @@ class AdvancedGpuChapterApp : public DemoApp {
                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                            0, sizeof(push), &push);
         const int32_t indirectIndex = indirectDrawBufferIndex();
-        if (indirectIndex >= 0) {
+        const int32_t countIndex = indirectDrawCountBufferIndex();
+        if (indirectIndex >= 0 && countIndex >= 0) {
+            vkCmdDrawIndirectCount(commandBuffer, storageBuffers_[static_cast<uint32_t>(indirectIndex)], 0,
+                                   storageBuffers_[static_cast<uint32_t>(countIndex)], 0,
+                                   indirectMaxDrawCount(), sizeof(VkDrawIndirectCommand));
+        } else if (indirectIndex >= 0) {
             vkCmdDrawIndirect(commandBuffer, storageBuffers_[static_cast<uint32_t>(indirectIndex)],
                               0, 1, sizeof(VkDrawIndirectCommand));
         } else {

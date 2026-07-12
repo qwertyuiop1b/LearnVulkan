@@ -468,7 +468,19 @@ endif()
 foreach(PRODUCTION_GRAPH_CHAPTER
         ch116_render_graph2
         ch117_shader_pipeline_toolchain
-        ch118_gpu_profiling2)
+        ch118_gpu_profiling2
+        ch119_reverse_z_hiz
+        ch120_gpu_parallel_algorithms
+        ch121_gpu_driven
+        ch122_meshlet
+        ch123_temporal_rendering
+        ch124_taau_dynamic_resolution
+        ch125_ray_query_hybrid
+        ch126_ray_denoise_gi
+        ch127_advanced_shadows
+        ch128_volume_fluid
+        ch129_advanced_materials
+        ch130_asset_pipeline)
     add_executable(${PRODUCTION_GRAPH_CHAPTER} chapters/${PRODUCTION_GRAPH_CHAPTER}.cpp)
     target_link_libraries(${PRODUCTION_GRAPH_CHAPTER} PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
         vulkan_tutorial_interactive vulkan_tutorial_engine)

@@ -1,0 +1,5 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){ uint id=gl_GlobalInvocationID.x; if(id>=1024u)return; float x=float(id)/1023.; float v=step(.42,fract(x*11.0+pc.p[0].z*.15)); float prefix=0.; for(uint i=0u;i<=id;i++) prefix+=step(.42,fract(float(i)/1023.*11.0+pc.p[0].z*.15)); float compact=prefix>0.? (prefix-1.)/512.: -1.; float radix=float((id^(id>>1u))&255u)/255.; data.values[id]=vec4(v,prefix/512.,compact,radix); }

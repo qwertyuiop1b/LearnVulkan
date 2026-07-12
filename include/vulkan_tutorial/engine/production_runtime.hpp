@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 namespace vulkan_tutorial::production {
@@ -179,5 +180,57 @@ struct RunningStats {
 
     [[nodiscard]] double variance() const { return samples > 1 ? m2 / static_cast<double>(samples - 1) : 0.0; }
 };
+
+struct SpirvReflection {
+    uint32_t descriptorBindings = 0;
+    uint32_t pushConstantBytes = 0;
+};
+
+inline SpirvReflection reflectSpirv(const std::vector<uint32_t>& words) {
+    SpirvReflection result{};
+    if (words.size() < 5 || words[0] != 0x07230203u) return result;
+    std::unordered_set<uint32_t> bindings;
+    std::unordered_map<uint32_t, uint32_t> pointerPointee;
+    std::unordered_map<uint32_t, uint32_t> pushVariables;
+    std::unordered_map<uint32_t, uint32_t> structSizes;
+    std::unordered_map<uint32_t, uint32_t> structMaxOffsets;
+    for (size_t cursor = 5; cursor < words.size();) {
+        const uint32_t instruction = words[cursor];
+        const uint16_t wordCount = uint16_t(instruction >> 16);
+        const uint16_t opcode = uint16_t(instruction & 0xffffu);
+        if (wordCount == 0 || cursor + wordCount > words.size()) break;
+        const uint32_t* operands = words.data() + cursor + 1;
+        switch (opcode) {
+        case 71: // OpDecorate: target, Decoration, literal
+            if (wordCount >= 4 && operands[1] == 33) bindings.insert(operands[0]);
+            break;
+        case 72: // OpMemberDecorate: struct, member, Decoration, literal offset
+            if (wordCount >= 5 && operands[2] == 35)
+                structMaxOffsets[operands[0]] = std::max(structMaxOffsets[operands[0]], operands[3] + 16);
+            break;
+        case 30: { // OpTypeStruct: result id followed by member type ids
+            if (wordCount >= 2) structSizes[operands[0]] = (wordCount - 2) * 16;
+            break;
+        }
+        case 32: // OpTypePointer: result id, storage class, pointee type
+            if (wordCount >= 4) pointerPointee[operands[0]] = operands[2];
+            break;
+        case 59: // OpVariable: type, result id, storage class
+            if (wordCount >= 4 && operands[2] == 9) pushVariables[operands[1]] = operands[0];
+            break;
+        default: break;
+        }
+        cursor += wordCount;
+    }
+    result.descriptorBindings = static_cast<uint32_t>(bindings.size());
+    for (const auto& variable : pushVariables) {
+        auto pointer = pointerPointee.find(variable.second);
+        if (pointer == pointerPointee.end()) continue;
+        const uint32_t structure = pointer->second;
+        const uint32_t size = std::max(structSizes[structure], structMaxOffsets[structure]);
+        result.pushConstantBytes = std::max(result.pushConstantBytes, size);
+    }
+    return result;
+}
 
 } // namespace vulkan_tutorial::production

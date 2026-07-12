@@ -1,0 +1,6 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(set=0,binding=1,std430) buffer History { vec4 values[]; } history;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){ uint id=gl_GlobalInvocationID.x; if(id>=1024u)return; float x=(float(id)+.5)/1024.; float current=.5+.42*sin(x*14.+pc.p[0].z); float motion=.025*sin(x*8.+pc.p[0].z*.7); float previous=history.values[id].x; float reproj=previous+motion; float disocclusion=step(.18,abs(current-reproj)); float reactive=step(.35,abs(current-.5)); data.values[id]=vec4(current,reproj,disocclusion,reactive); history.values[id]=vec4(current,reproj,disocclusion,reactive); }

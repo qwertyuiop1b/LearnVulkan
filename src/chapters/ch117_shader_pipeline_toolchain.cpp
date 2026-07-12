@@ -63,10 +63,13 @@ class Ch117App final : public EngineeringGpuChapterApp {
         if (!file) return;
         const auto bytes = static_cast<size_t>(file.tellg());
         shaderWords_ = bytes / sizeof(uint32_t);
-        // The chapter's SPIR-V layout is reflected from the standard descriptor
-        // and push-constant declarations used by the shared engineering shader.
-        reflectedBindings_ = 1;
-        pushConstantBytes_ = 128;
+        std::vector<uint32_t> words(shaderWords_);
+        file.clear();
+        file.seekg(0);
+        file.read(reinterpret_cast<char*>(words.data()), static_cast<std::streamsize>(bytes));
+        const auto reflection = vulkan_tutorial::production::reflectSpirv(words);
+        reflectedBindings_ = reflection.descriptorBindings;
+        pushConstantBytes_ = reflection.pushConstantBytes;
         shaderStamp_ = std::filesystem::last_write_time(shaderPath_);
         ++reloadGeneration_;
     }

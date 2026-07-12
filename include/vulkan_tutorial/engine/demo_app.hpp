@@ -23,6 +23,7 @@
 #include <imgui.h>
 #include <array>
 #include <cstring>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 
@@ -98,12 +99,28 @@ class DemoApp {
     std::vector<VkFence> inFlight_;
     uint32_t frame_ = 0;
     bool resized_ = false;
+    bool presentIdSupported_ = false;
+    bool presentWaitSupported_ = false;
+    uint64_t presentSequence_ = 0;
+
+    bool deviceExtensionSupported(const char* name) const {
+        uint32_t count = 0;
+        vkEnumerateDeviceExtensionProperties(physDev_, nullptr, &count, nullptr);
+        std::vector<VkExtensionProperties> extensions(count);
+        vkEnumerateDeviceExtensionProperties(physDev_, nullptr, &count, extensions.data());
+        for (const auto& extension : extensions)
+            if (std::strcmp(extension.extensionName, name) == 0) return true;
+        return false;
+    }
 
     void setupVulkan() {
         createInstance(instance_);
         VK_CHECK(glfwCreateWindowSurface(instance_, window_, nullptr, &surface_));
         pickPhysicalDevice(instance_, surface_, physDev_);
         createLogicalDevice(physDev_, surface_, device_, gQueue_, pQueue_, qIdx_);
+        presentIdSupported_ = deviceExtensionSupported(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+        presentWaitSupported_ = deviceExtensionSupported(VK_KHR_PRESENT_WAIT_EXTENSION_NAME) &&
+                                vkGetDeviceProcAddr(device_, "vkWaitForPresentKHR") != nullptr;
 
         VkCommandPoolCreateInfo cpci{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
         cpci.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -295,13 +312,25 @@ class DemoApp {
         si.signalSemaphoreCount = 1;
         si.pSignalSemaphores = &renderDone_[frame_];
         VK_CHECK(vkQueueSubmit(gQueue_, 1, &si, inFlight_[frame_]));
+        const uint64_t presentValue = ++presentSequence_;
+        VkPresentIdKHR presentId{VK_STRUCTURE_TYPE_PRESENT_ID_KHR};
+        if (presentIdSupported_) {
+            presentId.swapchainCount = 1;
+            presentId.pPresentIds = &presentValue;
+        }
         VkPresentInfoKHR pi{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+        pi.pNext = presentIdSupported_ ? &presentId : nullptr;
         pi.waitSemaphoreCount = 1;
         pi.pWaitSemaphores = &renderDone_[frame_];
         pi.swapchainCount = 1;
         pi.pSwapchains = &swapchain_;
         pi.pImageIndices = &idx;
         r = vkQueuePresentKHR(pQueue_, &pi);
+        if (presentWaitSupported_ && std::getenv("VK_TUTORIAL_PRESENT_WAIT") != nullptr) {
+            auto waitForPresent = reinterpret_cast<PFN_vkWaitForPresentKHR>(
+                vkGetDeviceProcAddr(device_, "vkWaitForPresentKHR"));
+            if (waitForPresent) waitForPresent(device_, swapchain_, presentValue, 0);
+        }
         if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR || resized_) {
             resized_ = false;
             recreate();

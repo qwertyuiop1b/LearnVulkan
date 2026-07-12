@@ -1,0 +1,5 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){ uint id=gl_GlobalInvocationID.x; if(id>=1024u)return; float x=(float(id)+.5)/1024.0; float d=.5+.48*sin(x*18.0+pc.p[0].z*.8)*exp(-x*1.4); float hiz=max(d, .5+.25*sin(x*3.2)); data.values[id]=vec4(x,d,hiz,1.0-d); }

@@ -1,0 +1,5 @@
+#version 450
+layout(local_size_x=64) in;
+layout(set=0,binding=0,std430) buffer Data { vec4 values[]; } data;
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+void main(){ uint id=gl_GlobalInvocationID.x; if(id>=1024u)return; float angle=float(id)*2.399+pc.p[0].z*.05; float cone=dot(normalize(vec3(cos(angle),.5,sin(angle))),vec3(0,0,1)); float frustum=step(-.25,sin(angle+pc.p[0].z*.03)); float hiz=step(.22,fract(float(id)*.371)); float visible=step(.0,cone)*frustum*hiz; data.values[id]=vec4(visible,cone,frustum,hiz); }
