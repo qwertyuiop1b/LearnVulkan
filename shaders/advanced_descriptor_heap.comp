@@ -1,0 +1,24 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) writeonly buffer MaterialHeap { vec4 materials[]; } heap;
+layout(std430, set = 0, binding = 1) writeonly buffer ObjectMaterials { uint materialIndex[]; } objects;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+uint hashUint(uint x) {
+    x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; return x ^ (x >> 16u);
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint materialCount = uint(pc.p[0].x + 0.5);
+    uint objectCount = uint(pc.p[0].y + 0.5);
+    if (index < materialCount) {
+        float fi = float(index);
+        vec3 color = 0.5 + 0.5 * cos(fi * 0.618 + vec3(0.0, 2.1, 4.2));
+        float roughness = 0.08 + 0.86 * fract(fi * 0.75487766);
+        heap.materials[index] = vec4(color, roughness);
+    }
+    if (index < objectCount)
+        objects.materialIndex[index] = hashUint(index * 17u + 31u) % materialCount;
+}

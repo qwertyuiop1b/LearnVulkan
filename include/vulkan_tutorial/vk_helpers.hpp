@@ -9,6 +9,8 @@
 #include <vulkan_tutorial/utils.hpp>
 
 #include <GLFW/glfw3.h>
+#include <array>
+#include <cstdlib>
 #include <set>
 #include <vector>
 
@@ -176,14 +178,21 @@ inline void createInstance(VkInstance& instance) {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
 #ifdef __APPLE__
-#ifdef __APPLE__
     createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
-
-#endif
-    if (ENABLE_VALIDATION_LAYERS) {
+    std::array<VkValidationFeatureEnableEXT, 2> validationEnables = {
+        VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+        VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};
+    VkValidationFeaturesEXT validationFeatures{VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT};
+    validationFeatures.enabledValidationFeatureCount = static_cast<uint32_t>(validationEnables.size());
+    validationFeatures.pEnabledValidationFeatures = validationEnables.data();
+    if (ENABLE_VALIDATION_LAYERS && checkValidationLayerSupport()) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
         createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
+        if (std::getenv("VK_TUTORIAL_GPU_ASSISTED") != nullptr)
+            createInfo.pNext = &validationFeatures;
+    } else if (ENABLE_VALIDATION_LAYERS) {
+        std::cerr << "[Vulkan] VK_LAYER_KHRONOS_validation is unavailable; continuing without validation.\n";
     }
     VK_CHECK(vkCreateInstance(&createInfo, nullptr, &instance));
 }
@@ -210,7 +219,10 @@ inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
                                 QueueFamilyIndices& indices,
                                 const VkPhysicalDeviceFeatures* extraFeatures = nullptr) {
     indices = findQueueFamilies(physicalDevice, surface);
-    std::set<uint32_t> uniqueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+    std::set<uint32_t> uniqueFamilies = {
+        indices.graphicsFamily.value(), indices.presentFamily.value()};
+    if (indices.computeFamily)
+        uniqueFamilies.insert(indices.computeFamily.value());
     const float queuePriority = 1.0f;
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     for (uint32_t family : uniqueFamilies) {
@@ -228,11 +240,28 @@ inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
         features.wideLines = extraFeatures->wideLines;
         features.geometryShader = extraFeatures->geometryShader;
     }
+    VkPhysicalDeviceVulkan12Features supported12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    VkPhysicalDeviceVulkan13Features supported13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    VkPhysicalDeviceFeatures2 supportedFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    supportedFeatures.pNext = &supported12;
+    supported12.pNext = &supported13;
+    vkGetPhysicalDeviceFeatures2(physicalDevice, &supportedFeatures);
+
+    VkPhysicalDeviceVulkan12Features enabled12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    enabled12.timelineSemaphore = supported12.timelineSemaphore;
+    VkPhysicalDeviceVulkan13Features enabled13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    enabled13.synchronization2 = supported13.synchronization2;
+    enabled12.pNext = &enabled13;
+    VkPhysicalDeviceFeatures2 enabledFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    enabledFeatures.features = features;
+    enabledFeatures.pNext = &enabled12;
+
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = &features;
+    createInfo.pNext = &enabledFeatures;
+    createInfo.pEnabledFeatures = nullptr;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
     createInfo.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
     if (ENABLE_VALIDATION_LAYERS) {

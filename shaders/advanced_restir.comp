@@ -1,0 +1,65 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+struct Reservoir { vec4 sampleWeight; vec4 state; };
+layout(std430, set = 0, binding = 0) buffer ReservoirA { Reservoir dataA[]; } a;
+layout(std430, set = 0, binding = 1) buffer ReservoirB { Reservoir dataB[]; } b;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+uint hashUint(uint x) {
+    x ^= x >> 16u; x *= 0x7feb352du; x ^= x >> 15u; x *= 0x846ca68bu; return x ^ (x >> 16u);
+}
+float random01(uint x) { return float(hashUint(x)) / 4294967295.0; }
+
+vec2 lightPosition(uint lightIndex) {
+    float fi = float(lightIndex);
+    float angle = fi * 2.39996323 + pc.p[0].z * 0.09;
+    return vec2(0.5) + vec2(cos(angle), sin(angle * 1.17)) * (0.12 + 0.36 * fract(fi * 0.618034));
+}
+
+void updateReservoir(inout Reservoir reservoir, uint candidate, float weight, float randomValue) {
+    reservoir.sampleWeight.z += weight;
+    reservoir.state.x += 1.0;
+    if (randomValue * reservoir.sampleWeight.z < weight) {
+        reservoir.sampleWeight.xy = lightPosition(candidate);
+        reservoir.sampleWeight.w = float(candidate);
+        reservoir.state.y = weight;
+    }
+}
+
+void main() {
+    uvec2 size = uvec2(pc.p[1].xy + 0.5);
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+    uint index = pixel.x + pixel.y * size.x;
+    uint parity = uint(pc.p[0].w + 0.5) & 1u;
+    Reservoir previous = parity == 0u ? b.dataB[index] : a.dataA[index];
+    Reservoir reservoir;
+    reservoir.sampleWeight = vec4(previous.sampleWeight.xy, previous.sampleWeight.z * pc.p[2].x,
+                                  previous.sampleWeight.w);
+    reservoir.state = vec4(previous.state.x * pc.p[2].x, previous.state.y, previous.state.z + 1.0, 0.0);
+    uint lightCount = uint(pc.p[1].z + 0.5);
+    uint seed = index ^ uint(pc.p[0].z * 1000.0) ^ uint(pc.p[2].w);
+    uint candidate = hashUint(seed) % lightCount;
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    vec2 delta = lightPosition(candidate) - uv;
+    float weight = 1.0 / (0.008 + dot(delta, delta));
+    updateReservoir(reservoir, candidate, weight, random01(seed + 1u));
+
+    int radius = int(pc.p[1].w + 0.5);
+    ivec2 offset = ivec2(int(hashUint(seed + 2u) % uint(radius * 2 + 1)) - radius,
+                         int(hashUint(seed + 3u) % uint(radius * 2 + 1)) - radius);
+    uvec2 neighborPixel = uvec2(clamp(ivec2(pixel) + offset, ivec2(0), ivec2(size) - 1));
+    uint neighborIndex = neighborPixel.x + neighborPixel.y * size.x;
+    Reservoir neighbor = parity == 0u ? b.dataB[neighborIndex] : a.dataA[neighborIndex];
+    uint neighborLight = uint(neighbor.sampleWeight.w + 0.5);
+    vec2 neighborDelta = lightPosition(neighborLight) - uv;
+    float neighborWeight = 1.0 / (0.008 + dot(neighborDelta, neighborDelta));
+    updateReservoir(reservoir, neighborLight, neighborWeight * pc.p[2].y, random01(seed + 4u));
+    reservoir.state.z = min(reservoir.state.z, 255.0);
+    if (parity == 0u)
+        a.dataA[index] = reservoir;
+    else
+        b.dataB[index] = reservoir;
+}

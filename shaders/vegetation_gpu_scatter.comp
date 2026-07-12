@@ -1,0 +1,135 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+struct VegetationInstance {
+    vec4 positionHeight; // xyz = root, w = blade height
+    vec4 attributes;     // width, yaw, color variation, wind phase
+};
+
+layout(std430, set = 0, binding = 0) writeonly buffer InstanceBuffer {
+    VegetationInstance instances[];
+};
+
+layout(std430, set = 0, binding = 1) buffer IndirectCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} command;
+
+layout(push_constant) uniform ScatterParams {
+    vec4 cameraTime;      // camera xyz, time
+    vec4 cameraForwardFov;// camera forward xyz, cosine of padded half-FOV
+    vec4 fieldClimate;    // half extent, density, height scale, seed
+    vec4 windCullSlope;   // wind strength, cull radius, minimum normal.y, unused
+    uvec4 gridLimits;     // grid width, grid height, max instances, unused
+} pc;
+
+float hash21(vec2 p, float seed) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32 + seed * 0.013);
+    return fract(p.x * p.y);
+}
+
+float valueNoise(vec2 p, float seed) {
+    vec2 cell = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash21(cell, seed);
+    float b = hash21(cell + vec2(1.0, 0.0), seed);
+    float c = hash21(cell + vec2(0.0, 1.0), seed);
+    float d = hash21(cell + vec2(1.0, 1.0), seed);
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p, float seed) {
+    float sum = 0.0;
+    float weight = 0.5;
+    mat2 rotation = mat2(0.80, -0.60, 0.60, 0.80);
+    for (int octave = 0; octave < 5; ++octave) {
+        sum += valueNoise(p, seed + float(octave) * 19.7) * weight;
+        p = rotation * p * 2.03 + vec2(7.1, -3.8);
+        weight *= 0.5;
+    }
+    return sum / 0.96875;
+}
+
+float terrainHeight(vec2 worldXZ) {
+    float seed = pc.fieldClimate.w;
+    vec2 p = worldXZ * 0.022;
+    float broad = fbm(p, seed);
+    float detail = fbm(p * 2.35 + vec2(11.7, -5.2), seed + 41.0);
+    float ridge = 1.0 - abs(detail * 2.0 - 1.0);
+    float normalizedHeight = broad * 0.76 + ridge * 0.24 - 0.43;
+    return normalizedHeight * pc.fieldClimate.z;
+}
+
+float terrainMoisture(vec2 worldXZ) {
+    return fbm(worldXZ * 0.018 + vec2(-13.0, 8.0), pc.fieldClimate.w + 127.0);
+}
+
+void main() {
+    uvec2 candidate = gl_GlobalInvocationID.xy;
+    if (candidate.x >= pc.gridLimits.x || candidate.y >= pc.gridLimits.y)
+        return;
+
+    float cellSize = (pc.fieldClimate.x * 2.0) / float(pc.gridLimits.x);
+    vec2 snappedCenter = floor(pc.cameraTime.xz / cellSize) * cellSize;
+    vec2 randomKey = vec2(candidate) + snappedCenter / cellSize;
+    vec2 jitter = vec2(hash21(randomKey, pc.fieldClimate.w + 3.0),
+                       hash21(randomKey.yx + 17.0, pc.fieldClimate.w + 29.0)) - 0.5;
+    vec2 worldXZ = snappedCenter - vec2(pc.fieldClimate.x) +
+                   (vec2(candidate) + 0.5 + jitter * 0.78) * cellSize;
+
+    vec2 toCamera = worldXZ - pc.cameraTime.xz;
+    float distanceSquared = dot(toCamera, toCamera);
+    if (distanceSquared > pc.windCullSlope.y * pc.windCullSlope.y)
+        return;
+    vec2 viewForward = pc.cameraForwardFov.xz;
+    if (distanceSquared > 4.0 && dot(viewForward, viewForward) > 1e-5 &&
+        dot(normalize(toCamera), normalize(viewForward)) < pc.cameraForwardFov.w)
+        return;
+
+    float height = terrainHeight(worldXZ);
+    float sampleStep = max(cellSize * 0.65, 0.35);
+    float left = terrainHeight(worldXZ - vec2(sampleStep, 0.0));
+    float right = terrainHeight(worldXZ + vec2(sampleStep, 0.0));
+    float down = terrainHeight(worldXZ - vec2(0.0, sampleStep));
+    float up = terrainHeight(worldXZ + vec2(0.0, sampleStep));
+    vec3 normal = normalize(vec3(left - right, sampleStep * 2.0, down - up));
+    if (normal.y < pc.windCullSlope.z)
+        return;
+
+    float moisture = terrainMoisture(worldXZ);
+    float relativeHeight = height / max(pc.fieldClimate.z, 0.001) + 0.43;
+    float fertile = smoothstep(0.22, 0.52, moisture);
+    fertile *= 1.0 - smoothstep(0.68, 0.88, relativeHeight);
+    fertile *= smoothstep(pc.windCullSlope.z, min(0.995, pc.windCullSlope.z + 0.12), normal.y);
+    float choice = hash21(randomKey + 31.0, pc.fieldClimate.w + 73.0);
+    if (choice > pc.fieldClimate.y * fertile)
+        return;
+
+    uint count = atomicAdd(command.instanceCount, 0u);
+    while (count < pc.gridLimits.z) {
+        uint previous = atomicCompSwap(command.instanceCount, count, count + 1u);
+        if (previous == count)
+            break;
+        count = previous;
+    }
+    uint outputIndex = count;
+    if (outputIndex >= pc.gridLimits.z)
+        return;
+
+    float sizeRandom = hash21(randomKey.yx + 71.0, pc.fieldClimate.w + 11.0);
+    float yawRandom = hash21(randomKey + 91.0, pc.fieldClimate.w + 37.0);
+    float colorRandom = hash21(randomKey.yx + 123.0, pc.fieldClimate.w + 59.0);
+    float phaseRandom = hash21(randomKey + 151.0, pc.fieldClimate.w + 83.0);
+
+    VegetationInstance instance;
+    instance.positionHeight = vec4(worldXZ.x, height + 0.025, worldXZ.y,
+                                   mix(0.72, 1.85, sizeRandom) * mix(0.72, 1.12, moisture));
+    instance.attributes = vec4(mix(0.055, 0.115, sizeRandom), yawRandom * 6.2831853,
+                               colorRandom, phaseRandom * 6.2831853);
+    instances[outputIndex] = instance;
+}

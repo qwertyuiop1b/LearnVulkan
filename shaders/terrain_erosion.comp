@@ -1,0 +1,50 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba16f, set = 0, binding = 0) uniform readonly image2D sourceTerrain;
+layout(rgba16f, set = 0, binding = 1) uniform writeonly image2D destinationTerrain;
+
+layout(push_constant) uniform ErosionParams {
+    float erosionRate;
+    float depositionRate;
+    float evaporation;
+    float talus;
+} pc;
+
+vec4 loadClamped(ivec2 pixel, ivec2 size) {
+    return imageLoad(sourceTerrain, clamp(pixel, ivec2(0), size - 1));
+}
+
+void main() {
+    ivec2 size = imageSize(sourceTerrain);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+
+    vec4 center = imageLoad(sourceTerrain, pixel);
+    vec4 left = loadClamped(pixel + ivec2(-1, 0), size);
+    vec4 right = loadClamped(pixel + ivec2(1, 0), size);
+    vec4 down = loadClamped(pixel + ivec2(0, -1), size);
+    vec4 up = loadClamped(pixel + ivec2(0, 1), size);
+
+    float neighborAverage = (left.r + right.r + down.r + up.r) * 0.25;
+    float lowest = min(min(left.r, right.r), min(down.r, up.r));
+    float excessSlope = max(center.r - lowest - pc.talus, 0.0);
+
+    // Water increases transport capacity on steep slopes. Sediment is carried in B.
+    float rain = 0.0045;
+    float water = clamp(center.g + rain, 0.0, 1.0);
+    float transportCapacity = excessSlope * (0.25 + water) * 2.4;
+    float sediment = center.b;
+    float eroded = min(excessSlope * pc.erosionRate, max(transportCapacity - sediment, 0.0));
+    float deposited = min(sediment, max(sediment - transportCapacity, 0.0) * pc.depositionRate);
+
+    // Thermal relaxation removes isolated spikes while retaining broad ridges.
+    float thermal = (neighborAverage - center.r) * pc.depositionRate * 0.16;
+    float newHeight = center.r - eroded + deposited + thermal;
+    sediment = clamp(sediment + eroded - deposited, 0.0, 1.0);
+
+    float outflow = clamp(excessSlope * 0.42, 0.0, water);
+    water = clamp((water - outflow) * (1.0 - pc.evaporation), 0.0, 1.0);
+    imageStore(destinationTerrain, pixel, vec4(clamp(newHeight, 0.01, 0.99), water, sediment, 1.0));
+}

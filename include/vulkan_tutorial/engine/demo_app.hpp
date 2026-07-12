@@ -21,6 +21,7 @@
 #include <vulkan_tutorial/interactive_chapter.hpp>
 
 #include <imgui.h>
+#include <array>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -60,6 +61,9 @@ class DemoApp {
     virtual void onInit() {}     ///< 子类初始化（设备已就绪）
     virtual void onUpdate() {}   ///< 每帧逻辑
     virtual void onShutdown() {} ///< 子类清理
+    virtual bool needsDepthBuffer() const { return false; }
+    virtual void onRecordPreRender(VkCommandBuffer, uint32_t) {} ///< RenderPass 前的 Compute/Copy 命令
+    virtual void onRecordRender(VkCommandBuffer, uint32_t) {}    ///< RenderPass 内的场景绘制命令
 
     // 子类可以访问的基础资源
     GLFWwindow* window_ = nullptr;
@@ -77,6 +81,7 @@ class DemoApp {
     InteractiveChapterTools interactive_;
 
     glm::vec3 bgColor_{0.05f, 0.07f, 0.12f}; ///< 背景色（子类可改）
+    uint64_t swapchainGeneration_ = 0;
 
     void waitIdle() const {
         vkDeviceWaitIdle(device_);
@@ -87,6 +92,7 @@ class DemoApp {
     std::vector<VkImage> swapImages_;
     std::vector<VkImageView> swapViews_;
     std::vector<VkFramebuffer> swapFBs_;
+    std::vector<DepthResources> depthResources_;
     std::vector<VkCommandBuffer> cmds_;
     std::vector<VkSemaphore> imgAvail_, renderDone_;
     std::vector<VkFence> inFlight_;
@@ -129,6 +135,7 @@ class DemoApp {
         uint32_t cnt = d.capabilities.minImageCount + 1;
         if (d.capabilities.maxImageCount)
             cnt = std::min(cnt, d.capabilities.maxImageCount);
+        const VkSwapchainKHR oldSwapchain = swapchain_;
         VkSwapchainCreateInfoKHR sci{VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};
         sci.surface = surface_;
         sci.minImageCount = cnt;
@@ -148,7 +155,11 @@ class DemoApp {
         sci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         sci.presentMode = m;
         sci.clipped = VK_TRUE;
+        sci.oldSwapchain = oldSwapchain;
         VK_CHECK(vkCreateSwapchainKHR(device_, &sci, nullptr, &swapchain_));
+        ++swapchainGeneration_;
+        if (oldSwapchain != VK_NULL_HANDLE)
+            vkDestroySwapchainKHR(device_, oldSwapchain, nullptr);
         uint32_t n = 0;
         vkGetSwapchainImagesKHR(device_, swapchain_, &n, nullptr);
         swapImages_.resize(n);
@@ -165,35 +176,54 @@ class DemoApp {
         }
 
         if (renderPass_ == VK_NULL_HANDLE) {
-            VkAttachmentDescription att{};
-            att.format = swapFmt_;
-            att.samples = VK_SAMPLE_COUNT_1_BIT;
-            att.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-            att.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            att.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            att.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            std::array<VkAttachmentDescription, 2> attachments{};
+            attachments[0].format = swapFmt_;
+            attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+            attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+            attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
             VkAttachmentReference cr{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+            VkAttachmentReference dr{1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
             VkSubpassDescription sub{};
             sub.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
             sub.colorAttachmentCount = 1;
             sub.pColorAttachments = &cr;
+            if (needsDepthBuffer()) {
+                attachments[1].format = findDepthFormat(physDev_);
+                attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+                attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+                attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+                attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+                sub.pDepthStencilAttachment = &dr;
+            }
             VkRenderPassCreateInfo rpci{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-            rpci.attachmentCount = 1;
-            rpci.pAttachments = &att;
+            rpci.attachmentCount = needsDepthBuffer() ? 2u : 1u;
+            rpci.pAttachments = attachments.data();
             rpci.subpassCount = 1;
             rpci.pSubpasses = &sub;
             VK_CHECK(vkCreateRenderPass(device_, &rpci, nullptr, &renderPass_));
         }
 
+        if (needsDepthBuffer()) {
+            depthResources_.resize(n);
+            for (auto& depth : depthResources_)
+                depth = createDepthResources(physDev_, device_, extent_);
+        }
         swapFBs_.resize(n);
         VkFramebufferCreateInfo fci{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
         fci.renderPass = renderPass_;
-        fci.attachmentCount = 1;
+        fci.attachmentCount = needsDepthBuffer() ? 2u : 1u;
         fci.width = extent_.width;
         fci.height = extent_.height;
         fci.layers = 1;
         for (uint32_t i = 0; i < n; ++i) {
-            fci.pAttachments = &swapViews_[i];
+            std::array<VkImageView, 2> framebufferAttachments = {
+                swapViews_[i], needsDepthBuffer() ? depthResources_[i].view : VK_NULL_HANDLE};
+            fci.pAttachments = framebufferAttachments.data();
             VK_CHECK(vkCreateFramebuffer(device_, &fci, nullptr, &swapFBs_[i]));
         }
 
@@ -233,19 +263,22 @@ class DemoApp {
         VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
         VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
         interactive_.beginGpuSection(cmd, frame_);
+        onRecordPreRender(cmd, frame_);
 
-        VkClearValue cv{};
-        cv.color.float32[0] = bgColor_.r;
-        cv.color.float32[1] = bgColor_.g;
-        cv.color.float32[2] = bgColor_.b;
-        cv.color.float32[3] = 1.0f;
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color.float32[0] = bgColor_.r;
+        clearValues[0].color.float32[1] = bgColor_.g;
+        clearValues[0].color.float32[2] = bgColor_.b;
+        clearValues[0].color.float32[3] = 1.0f;
+        clearValues[1].depthStencil = {1.0f, 0};
         VkRenderPassBeginInfo rbi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
         rbi.renderPass = renderPass_;
         rbi.framebuffer = swapFBs_[idx];
         rbi.renderArea.extent = extent_;
-        rbi.clearValueCount = 1;
-        rbi.pClearValues = &cv;
+        rbi.clearValueCount = needsDepthBuffer() ? 2u : 1u;
+        rbi.pClearValues = clearValues.data();
         vkCmdBeginRenderPass(cmd, &rbi, VK_SUBPASS_CONTENTS_INLINE);
+        onRecordRender(cmd, frame_);
         interactive_.renderUi(cmd);
         vkCmdEndRenderPass(cmd);
 
@@ -288,17 +321,21 @@ class DemoApp {
         for (auto fb : swapFBs_)
             vkDestroyFramebuffer(device_, fb, nullptr);
         swapFBs_.clear();
+        for (auto& depth : depthResources_)
+            destroyDepthResources(device_, depth);
+        depthResources_.clear();
         for (auto v : swapViews_)
             vkDestroyImageView(device_, v, nullptr);
-        vkDestroySwapchainKHR(device_, swapchain_, nullptr);
         createSwapchainObjects();
         interactive_.onSwapchainRecreated(renderPass_, swapFmt_, static_cast<uint32_t>(swapImages_.size()));
     }
 
     void teardown() {
-        vkDestroyRenderPass(device_, renderPass_, nullptr);
         for (auto fb : swapFBs_)
             vkDestroyFramebuffer(device_, fb, nullptr);
+        for (auto& depth : depthResources_)
+            destroyDepthResources(device_, depth);
+        vkDestroyRenderPass(device_, renderPass_, nullptr);
         for (int i = 0; i < DEMO_MAX_FRAMES; ++i) {
             vkDestroySemaphore(device_, imgAvail_[i], nullptr);
             vkDestroySemaphore(device_, renderDone_[i], nullptr);

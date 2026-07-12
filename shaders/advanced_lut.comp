@@ -1,0 +1,33 @@
+#version 450
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+layout(std430, set = 0, binding = 0) writeonly buffer LutBuffer { vec4 colors[]; } lut;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+vec3 grade(vec3 color, int preset) {
+    if (preset == 1) {
+        color = mat3(1.08, -0.04, -0.02, -0.02, 1.02, 0.01, -0.04, 0.02, 0.92) * color;
+        color = pow(max(color, vec3(0.0)), vec3(0.92, 0.98, 1.08));
+    } else if (preset == 2) {
+        float luminance = dot(color, vec3(0.2126, 0.7152, 0.0722));
+        color = vec3(luminance * 0.12, luminance * 1.18, luminance * 0.24);
+    } else if (preset == 3) {
+        color *= vec3(1.16, 1.02, 0.84);
+        color.r += color.g * 0.07;
+    } else if (preset == 4) {
+        color *= vec3(0.82, 1.02, 1.18);
+        color.b += color.g * 0.06;
+    }
+    float contrast = pc.p[0].w;
+    return clamp((color - 0.5) * contrast + 0.5, 0.0, 1.0);
+}
+
+void main() {
+    uint size = uint(pc.p[0].x + 0.5);
+    uvec3 coordinate = gl_GlobalInvocationID.xyz;
+    if (any(greaterThanEqual(coordinate, uvec3(size))))
+        return;
+    vec3 color = vec3(coordinate) / float(max(size - 1u, 1u));
+    uint index = coordinate.x + coordinate.y * size + coordinate.z * size * size;
+    lut.colors[index] = vec4(grade(color, int(pc.p[0].y + 0.5)), 1.0);
+}

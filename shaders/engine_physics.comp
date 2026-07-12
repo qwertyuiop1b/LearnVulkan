@@ -1,0 +1,38 @@
+#version 450
+
+layout(local_size_x = 64) in;
+struct Body { vec4 positionRadius; vec4 velocityRestitution; };
+layout(set = 0, binding = 0, std430) buffer Bodies { Body bodies[]; };
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+
+float hash11(float x) { return fract(sin(x * 117.31) * 43758.5453); }
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    uint count = uint(pc.p[5].w);
+    if (id >= count) return;
+    Body b = bodies[id];
+    if (b.positionRadius.w <= 0.0) {
+        float x = float(int(id % 12u) - 6) * 0.72;
+        float layer = float(id / 12u);
+        b.positionRadius = vec4(x, 1.0 + layer * 0.72, -4.0 + (hash11(float(id)) - 0.5) * 3.0,
+                                0.18 + hash11(float(id) + 3.0) * 0.18);
+        b.velocityRestitution = vec4((hash11(float(id) + 7.0) - 0.5) * 1.6, 0.0,
+                                     (hash11(float(id) + 11.0) - 0.5) * 0.8, pc.p[5].y);
+    }
+    if (pc.p[5].z > 0.5) {
+        float dt = 1.0 / 60.0;
+        b.velocityRestitution.y -= pc.p[5].x * dt;
+        b.positionRadius.xyz += b.velocityRestitution.xyz * dt;
+        float radius = b.positionRadius.w;
+        if (b.positionRadius.y < radius) {
+            b.positionRadius.y = radius;
+            b.velocityRestitution.y = abs(b.velocityRestitution.y) * pc.p[5].y;
+            b.velocityRestitution.xz *= 0.985;
+        }
+        if (abs(b.positionRadius.x) > 5.2) b.velocityRestitution.x *= -0.92;
+        if (abs(b.positionRadius.z + 4.0) > 3.8) b.velocityRestitution.z *= -0.92;
+    }
+    b.velocityRestitution.w = pc.p[5].y;
+    bodies[id] = b;
+}

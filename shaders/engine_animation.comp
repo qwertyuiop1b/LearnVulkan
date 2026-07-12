@@ -1,0 +1,50 @@
+#version 450
+
+layout(local_size_x = 1) in;
+struct Bone { vec4 aRadius; vec4 bKind; vec4 color; };
+layout(set = 0, binding = 0, std430) buffer Skeleton { Bone bones[]; };
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+
+void bone(int i, vec3 a, vec3 b, float radius, float kind, vec3 color) {
+    bones[i].aRadius = vec4(a, radius);
+    bones[i].bKind = vec4(b, kind);
+    bones[i].color = vec4(color, 1.0);
+}
+
+void main() {
+    float time = pc.p[4].w * pc.p[5].x;
+    float swing = sin(time) * 0.42;
+    vec3 pelvis = vec3(0, 1.35 + abs(sin(time * 2.0)) * 0.06, 0);
+    vec3 chest = pelvis + vec3(0, 0.92, 0);
+    vec3 neck = chest + vec3(0, 0.34, 0);
+    bone(0, pelvis, chest, 0.17, 0, vec3(0.12, 0.55, 1.0));
+    bone(1, chest, neck, 0.13, 0, vec3(0.18, 0.65, 1.0));
+    bone(2, neck, neck + vec3(0, 0.38, 0), 0.24, 1, vec3(1.0, 0.52, 0.18));
+    vec3 ls = chest + vec3(-0.28, 0.12, 0), rs = chest + vec3(0.28, 0.12, 0);
+    vec3 le = ls + vec3(-0.46, -0.28 + swing * 0.18, swing * 0.42);
+    vec3 lh = le + vec3(-0.38, -0.30, swing * 0.28);
+    bone(3, ls, le, 0.105, 0, vec3(0.12, 0.75, 0.95));
+    bone(4, le, lh, 0.085, 0, vec3(0.08, 0.55, 0.9));
+    vec3 target = vec3(pc.p[5].y, pc.p[5].z, 0.25);
+    float l1 = 0.55, l2 = 0.48;
+    vec3 rel = target - rs;
+    float d = clamp(length(rel.xy), 0.08, l1 + l2 - 0.01);
+    float a2 = acos(clamp((d*d-l1*l1-l2*l2)/(2.0*l1*l2), -1.0, 1.0));
+    float a1 = atan(rel.y, rel.x) - atan(l2*sin(a2), l1+l2*cos(a2));
+    vec3 re = rs + vec3(cos(a1), sin(a1), 0) * l1;
+    vec3 rh = re + vec3(cos(a1+a2), sin(a1+a2), 0) * l2;
+    if (pc.p[5].w < 0.5) { re = rs + vec3(0.45, -0.28-swing*0.18, -swing*0.42); rh = re + vec3(0.38,-0.30,-swing*0.28); }
+    bone(5, rs, re, 0.105, 0, vec3(1.0, 0.28, 0.12));
+    bone(6, re, rh, 0.085, 0, vec3(1.0, 0.55, 0.08));
+    vec3 lk = pelvis + vec3(-0.18 + swing*0.12, -0.72, -swing*0.48);
+    vec3 lf = lk + vec3(0, -0.70, swing*0.28);
+    vec3 rk = pelvis + vec3(0.18 - swing*0.12, -0.72, swing*0.48);
+    vec3 rf = rk + vec3(0, -0.70, -swing*0.28);
+    bone(7, pelvis+vec3(-0.16,0,0), lk, 0.13, 0, vec3(0.18,0.48,1.0));
+    bone(8, lk, lf, 0.105, 0, vec3(0.08,0.32,0.85));
+    bone(9, pelvis+vec3(0.16,0,0), rk, 0.13, 0, vec3(1.0,0.22,0.12));
+    bone(10, rk, rf, 0.105, 0, vec3(0.85,0.12,0.08));
+    bone(11, lf, lf+vec3(0,-0.05,-0.28), 0.12, 0, vec3(0.1,0.28,0.7));
+    bone(12, rf, rf+vec3(0,-0.05,-0.28), 0.12, 0, vec3(0.7,0.12,0.06));
+    bone(13, pelvis+vec3(-0.22,0,0), pelvis+vec3(0.22,0,0), 0.16, 0, vec3(0.6,0.18,0.8));
+}

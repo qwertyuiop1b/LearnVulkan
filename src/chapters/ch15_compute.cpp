@@ -86,6 +86,12 @@ constexpr uint32_t HEIGHT = 600;
 constexpr int MAX_FRAMES = 2;
 constexpr uint32_t N_PARTICLES = 8192; // 必须是 local_size_x(256) 的倍数
 
+#ifdef CH15_USE_SYNCHRONIZATION2
+constexpr const char* WINDOW_TITLE = "Ch95 - Synchronization 2: GPU Particles";
+#else
+constexpr const char* WINDOW_TITLE = "Ch15 - GPU Particles (Compute Shader)";
+#endif
+
 // ─── 粒子数据结构 ─────────────────────────────────────────────────────────────
 
 /**
@@ -199,7 +205,7 @@ class Ch15App {
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch15 - GPU 粒子系统（Compute Shader）", nullptr, nullptr);
+        window_ = glfwCreateWindow(WIDTH, HEIGHT, WINDOW_TITLE, nullptr, nullptr);
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* w, int, int) {
             reinterpret_cast<Ch15App*>(glfwGetWindowUserPointer(w))->resized_ = true;
@@ -456,26 +462,34 @@ class Ch15App {
         // 这是关键同步点！如果没有这个 barrier：
         //   - 顶点着色器可能读到上一帧（甚至更旧）的粒子数据
         //   - 出现视觉撕裂或数据竞争
-        VkBufferMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;          // 计算着色器已写完
-        barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT; // 顶点着色器要读
+#ifdef CH15_USE_SYNCHRONIZATION2
+        VkBufferMemoryBarrier2 barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2};
+        barrier.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        barrier.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT;
+        barrier.dstStageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        barrier.dstAccessMask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.buffer = particleBuffers_[currentFrame_];
         barrier.offset = 0;
         barrier.size = VK_WHOLE_SIZE;
-
-        vkCmdPipelineBarrier(cmd,
-                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // 等计算着色器完成
-                             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,   // 再开始顶点输入
-                             0,
-                             0,
-                             nullptr, // 内存 barrier
-                             1,
-                             &barrier, // 缓冲 barrier  ← 我们用这个
-                             0,
-                             nullptr); // 图像 barrier
+        VkDependencyInfo dependency{VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+        dependency.bufferMemoryBarrierCount = 1;
+        dependency.pBufferMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(cmd, &dependency);
+#else
+        VkBufferMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.buffer = particleBuffers_[currentFrame_];
+        barrier.offset = 0;
+        barrier.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr,
+                             1, &barrier, 0, nullptr);
+#endif
 
         // ── 开始 RenderPass ───────────────────────────────────────────────────
         VkClearValue clearColor{};
@@ -536,15 +550,27 @@ class Ch15App {
         recordComputeCommandBuffer(computeCmdBufs_[currentFrame_], dt);
 
         // 提交计算命令到计算队列
+#ifdef CH15_USE_SYNCHRONIZATION2
+        VkCommandBufferSubmitInfo computeCmd{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+        computeCmd.commandBuffer = computeCmdBufs_[currentFrame_];
+        VkSemaphoreSubmitInfo computeSignal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+        computeSignal.semaphore = computeFinishedSems_[currentFrame_];
+        computeSignal.stageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+        VkSubmitInfo2 computeSubmit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+        computeSubmit.commandBufferInfoCount = 1;
+        computeSubmit.pCommandBufferInfos = &computeCmd;
+        computeSubmit.signalSemaphoreInfoCount = 1;
+        computeSubmit.pSignalSemaphoreInfos = &computeSignal;
+        VK_CHECK(vkQueueSubmit2(computeQueue_, 1, &computeSubmit, computeInFlightFences_[currentFrame_]));
+#else
         VkSubmitInfo computeSubmit{};
         computeSubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         computeSubmit.commandBufferCount = 1;
         computeSubmit.pCommandBuffers = &computeCmdBufs_[currentFrame_];
-        // 计算完成后 signal computeFinishedSems_，通知图形队列可以开始
         computeSubmit.signalSemaphoreCount = 1;
         computeSubmit.pSignalSemaphores = &computeFinishedSems_[currentFrame_];
-
         VK_CHECK(vkQueueSubmit(computeQueue_, 1, &computeSubmit, computeInFlightFences_[currentFrame_]));
+#endif
 
         // ─── 图形阶段 ─────────────────────────────────────────────────────────
 
@@ -574,7 +600,32 @@ class Ch15App {
             VK_PIPELINE_STAGE_VERTEX_INPUT_BIT // 在顶点输入阶段等计算
         };
 
-        VkSemaphore signalSems[] = {renderFinishedSems_[currentFrame_]};
+        // Present can retain a binary semaphore after its submitting fence signals.
+        // Therefore the render-finished semaphore is owned by the acquired image,
+        // not by the CPU frame slot.
+        VkSemaphore signalSems[] = {renderFinishedSems_[imageIndex]};
+#ifdef CH15_USE_SYNCHRONIZATION2
+        std::array<VkSemaphoreSubmitInfo, 2> waitInfos{};
+        waitInfos[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        waitInfos[0].semaphore = waitSems[0];
+        waitInfos[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        waitInfos[1].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+        waitInfos[1].semaphore = waitSems[1];
+        waitInfos[1].stageMask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+        VkCommandBufferSubmitInfo graphicsCmd{VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO};
+        graphicsCmd.commandBuffer = graphicsCmdBufs_[currentFrame_];
+        VkSemaphoreSubmitInfo graphicsSignal{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+        graphicsSignal.semaphore = signalSems[0];
+        graphicsSignal.stageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT;
+        VkSubmitInfo2 graphicsSubmit{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+        graphicsSubmit.waitSemaphoreInfoCount = static_cast<uint32_t>(waitInfos.size());
+        graphicsSubmit.pWaitSemaphoreInfos = waitInfos.data();
+        graphicsSubmit.commandBufferInfoCount = 1;
+        graphicsSubmit.pCommandBufferInfos = &graphicsCmd;
+        graphicsSubmit.signalSemaphoreInfoCount = 1;
+        graphicsSubmit.pSignalSemaphoreInfos = &graphicsSignal;
+        VK_CHECK(vkQueueSubmit2(graphicsQueue_, 1, &graphicsSubmit, inFlightFences_[currentFrame_]));
+#else
         VkSubmitInfo graphicsSubmit{};
         graphicsSubmit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         graphicsSubmit.waitSemaphoreCount = static_cast<uint32_t>(waitSems.size());
@@ -585,6 +636,7 @@ class Ch15App {
         graphicsSubmit.signalSemaphoreCount = 1;
         graphicsSubmit.pSignalSemaphores = signalSems;
         VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &graphicsSubmit, inFlightFences_[currentFrame_]));
+#endif
 
         VkSwapchainKHR scs[] = {swapchain_};
         VkPresentInfoKHR pi{};
@@ -733,7 +785,7 @@ class Ch15App {
 
     void createSyncObjects() {
         imageAvailableSems_.resize(MAX_FRAMES);
-        renderFinishedSems_.resize(MAX_FRAMES);
+        renderFinishedSems_.resize(swapchainImages_.size());
         computeFinishedSems_.resize(MAX_FRAMES);
         inFlightFences_.resize(MAX_FRAMES);
         computeInFlightFences_.resize(MAX_FRAMES);
@@ -746,11 +798,12 @@ class Ch15App {
 
         for (int i = 0; i < MAX_FRAMES; ++i) {
             VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &imageAvailableSems_[i]));
-            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &renderFinishedSems_[i]));
             VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &computeFinishedSems_[i]));
             VK_CHECK(vkCreateFence(device_, &fCI, nullptr, &inFlightFences_[i]));
             VK_CHECK(vkCreateFence(device_, &fCI, nullptr, &computeInFlightFences_[i]));
         }
+        for (auto& semaphore : renderFinishedSems_)
+            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &semaphore));
         std::cout << "✅ 同步对象已创建（含计算专用信号量和栅栏）\n";
     }
 
@@ -772,7 +825,7 @@ class Ch15App {
         ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
 
-        if (ENABLE_VALIDATION_LAYERS) {
+        if (ENABLE_VALIDATION_LAYERS && checkValidationLayerSupport()) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
         }
@@ -843,14 +896,31 @@ class Ch15App {
         VkPhysicalDeviceFeatures feat{};
         feat.samplerAnisotropy = VK_TRUE;
 
+#ifdef CH15_USE_SYNCHRONIZATION2
+        VkPhysicalDeviceVulkan13Features supportedVulkan13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        VkPhysicalDeviceFeatures2 supportedFeatures{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+        supportedFeatures.pNext = &supportedVulkan13;
+        vkGetPhysicalDeviceFeatures2(physicalDevice_, &supportedFeatures);
+        if (!supportedVulkan13.synchronization2)
+            throw std::runtime_error("当前设备不支持 Vulkan Synchronization 2");
+        if (!supportedVulkan13.shaderDemoteToHelperInvocation)
+            throw std::runtime_error("当前设备不支持 particle.frag 所需的 shaderDemoteToHelperInvocation");
+        VkPhysicalDeviceVulkan13Features vulkan13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+        vulkan13.synchronization2 = VK_TRUE;
+        vulkan13.shaderDemoteToHelperInvocation = VK_TRUE;
+#endif
+
         VkDeviceCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+#ifdef CH15_USE_SYNCHRONIZATION2
+        ci.pNext = &vulkan13;
+#endif
         ci.queueCreateInfoCount = static_cast<uint32_t>(qcis.size());
         ci.pQueueCreateInfos = qcis.data();
         ci.pEnabledFeatures = &feat;
         ci.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
         ci.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
-        if (ENABLE_VALIDATION_LAYERS) {
+        if (ENABLE_VALIDATION_LAYERS && checkValidationLayerSupport()) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
         }
@@ -1070,11 +1140,12 @@ class Ch15App {
             vkDestroyBuffer(device_, particleBuffers_[i], nullptr);
             vkFreeMemory(device_, particleMemories_[i], nullptr);
             vkDestroySemaphore(device_, imageAvailableSems_[i], nullptr);
-            vkDestroySemaphore(device_, renderFinishedSems_[i], nullptr);
             vkDestroySemaphore(device_, computeFinishedSems_[i], nullptr);
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
             vkDestroyFence(device_, computeInFlightFences_[i], nullptr);
         }
+        for (auto semaphore : renderFinishedSems_)
+            vkDestroySemaphore(device_, semaphore, nullptr);
         vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
         vkDestroyDescriptorSetLayout(device_, computeSetLayout_, nullptr);
         vkDestroyCommandPool(device_, commandPool_, nullptr);
@@ -1099,7 +1170,11 @@ class Ch15App {
 
 int main() {
     std::cout << "═══════════════════════════════════════════════════════════════════\n";
+#ifdef CH15_USE_SYNCHRONIZATION2
+    std::cout << " 第95章：Synchronization 2 — GPU 粒子系统\n";
+#else
     std::cout << " 第15章：Compute Shader — GPU 粒子系统\n";
+#endif
     std::cout << "\n";
     std::cout << " 核心概念：\n";
     std::cout << "   • VkComputePipeline       — 独立于图形管线的计算管线\n";

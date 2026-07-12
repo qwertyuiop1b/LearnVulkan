@@ -154,6 +154,10 @@ class Ch19App {
 
     // ── RenderPass（含两个 Subpass） ─────────────────────────────────────────
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
+    // MoltenVK 回退：将 G-Buffer 写入和采样光照拆成两个 RenderPass。
+    VkRenderPass lightingRenderPass_ = VK_NULL_HANDLE;
+    VkFramebuffer gbufferFramebuffer_ = VK_NULL_HANDLE;
+    VkSampler gbufferSampler_ = VK_NULL_HANDLE;
 
     // ── Subpass 0：几何管线 ────────────────────────────────────────────────
     VkDescriptorSetLayout geomSetLayout_ = VK_NULL_HANDLE;
@@ -210,6 +214,7 @@ class Ch19App {
         createImageViews();
         depthFormat_ = findDepthFormat();
         createGBufferImages();      // ← 创建 G-Buffer 附件图像
+        createGBufferSampler();
         createDeferredRenderPass(); // ← 含两个 Subpass 的 RenderPass
         createDescriptorSetLayouts();
         createGeometryPipeline(); // ← Subpass 0：写入 G-Buffer
@@ -269,7 +274,8 @@ class Ch19App {
 
         // G-Buffer 使用 RGBA16F 格式存储浮点数（位置、法线需要精度）
         VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | // 作为颜色附件写入
-                                       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;  // 作为 Input Attachment 读取
+                                       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |  // 原生子通道读取
+                                       VK_IMAGE_USAGE_SAMPLED_BIT;           // MoltenVK 采样回退
 
         createGImage(VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage, posImage_, posMemory_, posView_);
         createGImage(VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage, normalImage_, normalMemory_, normalView_);
@@ -279,11 +285,93 @@ class Ch19App {
         std::cout << "✅ G-Buffer 附件已创建（Position/Normal/Albedo/Depth）\n";
     }
 
+    void createGBufferSampler() {
+#ifdef __APPLE__
+        VkSamplerCreateInfo info{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+        info.magFilter = VK_FILTER_NEAREST;
+        info.minFilter = VK_FILTER_NEAREST;
+        info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        info.maxLod = 0.0f;
+        VK_CHECK(vkCreateSampler(device_, &info, nullptr, &gbufferSampler_));
+#endif
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // 创建 Deferred RenderPass（含 Subpass 依赖和 Input Attachments）
     // ═══════════════════════════════════════════════════════════════════════
 
     void createDeferredRenderPass() {
+#ifdef __APPLE__
+        {
+        VkAttachmentDescription posAtt{};
+        posAtt.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        posAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+        posAtt.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        posAtt.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        posAtt.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        posAtt.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        VkAttachmentDescription normalAtt = posAtt;
+        VkAttachmentDescription albedoAtt = posAtt;
+        albedoAtt.format = VK_FORMAT_R8G8B8A8_UNORM;
+        VkAttachmentDescription depthAtt{};
+        depthAtt.format = depthFormat_;
+        depthAtt.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAtt.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        depthAtt.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthAtt.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        depthAtt.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        std::array<VkAttachmentReference, 3> colors{{{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                                       {1, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+                                                       {2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}}};
+        VkAttachmentReference depthRef{3, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription geometry{};
+        geometry.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        geometry.colorAttachmentCount = static_cast<uint32_t>(colors.size());
+        geometry.pColorAttachments = colors.data();
+        geometry.pDepthStencilAttachment = &depthRef;
+        VkSubpassDependency geometryDone{};
+        geometryDone.srcSubpass = 0;
+        geometryDone.dstSubpass = VK_SUBPASS_EXTERNAL;
+        geometryDone.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        geometryDone.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        geometryDone.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        geometryDone.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        geometryDone.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+        std::array<VkAttachmentDescription, 4> gbufferAttachments = {posAtt, normalAtt, albedoAtt, depthAtt};
+        VkRenderPassCreateInfo gbufferInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+        gbufferInfo.attachmentCount = static_cast<uint32_t>(gbufferAttachments.size());
+        gbufferInfo.pAttachments = gbufferAttachments.data();
+        gbufferInfo.subpassCount = 1;
+        gbufferInfo.pSubpasses = &geometry;
+        gbufferInfo.dependencyCount = 1;
+        gbufferInfo.pDependencies = &geometryDone;
+        VK_CHECK(vkCreateRenderPass(device_, &gbufferInfo, nullptr, &renderPass_));
+
+        VkAttachmentDescription output{};
+        output.format = swapchainImageFormat_;
+        output.samples = VK_SAMPLE_COUNT_1_BIT;
+        output.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        output.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        output.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        output.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        VkAttachmentReference outputRef{0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+        VkSubpassDescription lighting{};
+        lighting.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+        lighting.colorAttachmentCount = 1;
+        lighting.pColorAttachments = &outputRef;
+        VkRenderPassCreateInfo lightingInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+        lightingInfo.attachmentCount = 1;
+        lightingInfo.pAttachments = &output;
+        lightingInfo.subpassCount = 1;
+        lightingInfo.pSubpasses = &lighting;
+        VK_CHECK(vkCreateRenderPass(device_, &lightingInfo, nullptr, &lightingRenderPass_));
+        std::cout << "✅ macOS Deferred 回退：G-Buffer 采样两阶段 RenderPass\n";
+        return;
+        }
+#endif
         // 附件描述（共 5 个）
         // [0] G-Buffer 位置
         // [1] G-Buffer 法线
@@ -415,7 +503,11 @@ class Ch19App {
             std::array<VkDescriptorSetLayoutBinding, 4> bindings{};
             for (int i = 0; i < 3; ++i)
                 bindings[i] = {static_cast<uint32_t>(i),
+#ifdef __APPLE__
+                               VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+#else
                                VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+#endif
                                1,
                                VK_SHADER_STAGE_FRAGMENT_BIT,
                                nullptr};
@@ -523,8 +615,13 @@ class Ch19App {
     }
 
     void createLightingPipeline() {
+#ifdef __APPLE__
+        VkShaderModule vert = createShaderModuleFromFile(device_, "deferred_lighting_sampled.vert.spv");
+        VkShaderModule frag = createShaderModuleFromFile(device_, "deferred_lighting_sampled.frag.spv");
+#else
         VkShaderModule vert = createShaderModuleFromFile(device_, "deferred_lighting.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "deferred_lighting.frag.spv");
+#endif
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                      nullptr,
@@ -586,8 +683,14 @@ class Ch19App {
         pi.pColorBlendState = &cb;
         pi.pDynamicState = &dynS;
         pi.layout = lightPipeLayout_;
-        pi.renderPass = renderPass_;
+        pi.renderPass =
+#ifdef __APPLE__
+            lightingRenderPass_;
+        pi.subpass = 0;
+#else
+            renderPass_;
         pi.subpass = 1; // Subpass 1!
+#endif
         VK_CHECK(vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pi, nullptr, &lightPipeline_));
         vkDestroyShaderModule(device_, frag, nullptr);
         vkDestroyShaderModule(device_, vert, nullptr);
@@ -598,6 +701,75 @@ class Ch19App {
         VkCommandBufferBeginInfo bi{};
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
+
+#ifdef __APPLE__
+        {
+        std::array<VkClearValue, 4> gbufferClears{};
+        gbufferClears[3].depthStencil = {1.0f, 0};
+        VkRenderPassBeginInfo geometryBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        geometryBegin.renderPass = renderPass_;
+        geometryBegin.framebuffer = gbufferFramebuffer_;
+        geometryBegin.renderArea = {{0, 0}, swapchainExtent_};
+        geometryBegin.clearValueCount = static_cast<uint32_t>(gbufferClears.size());
+        geometryBegin.pClearValues = gbufferClears.data();
+        vkCmdBeginRenderPass(cmd, &geometryBegin, VK_SUBPASS_CONTENTS_INLINE);
+        VkViewport vp{0, 0, static_cast<float>(swapchainExtent_.width), static_cast<float>(swapchainExtent_.height), 0, 1};
+        VkRect2D sc{{0, 0}, swapchainExtent_};
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, geomPipeline_);
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+        vkCmdSetScissor(cmd, 0, 1, &sc);
+        VkBuffer vb[] = {vertexBuffer_};
+        VkDeviceSize off[] = {0};
+        vkCmdBindVertexBuffers(cmd, 0, 1, vb, off);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, geomPipeLayout_, 0, 1,
+                                &geomDescSets_[currentFrame_], 0, nullptr);
+        vkCmdDraw(cmd, static_cast<uint32_t>(SCENE_VERTICES.size()), 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+
+        std::array<VkImageMemoryBarrier, 3> gbufferBarriers{};
+        std::array<VkImage, 3> gbufferImages = {posImage_, normalImage_, albedoImage_};
+        for (size_t i = 0; i < gbufferBarriers.size(); ++i) {
+            gbufferBarriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            gbufferBarriers[i].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            gbufferBarriers[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            gbufferBarriers[i].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            gbufferBarriers[i].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            gbufferBarriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            gbufferBarriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            gbufferBarriers[i].image = gbufferImages[i];
+            gbufferBarriers[i].subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+        }
+        vkCmdPipelineBarrier(cmd,
+                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                             0,
+                             0,
+                             nullptr,
+                             0,
+                             nullptr,
+                             static_cast<uint32_t>(gbufferBarriers.size()),
+                             gbufferBarriers.data());
+
+        VkClearValue outputClear{};
+        outputClear.color = {{0.01f, 0.01f, 0.02f, 1.0f}};
+        VkRenderPassBeginInfo lightingBegin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+        lightingBegin.renderPass = lightingRenderPass_;
+        lightingBegin.framebuffer = framebuffers_[imageIndex];
+        lightingBegin.renderArea = {{0, 0}, swapchainExtent_};
+        lightingBegin.clearValueCount = 1;
+        lightingBegin.pClearValues = &outputClear;
+        vkCmdBeginRenderPass(cmd, &lightingBegin, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, lightPipeline_);
+        vkCmdSetViewport(cmd, 0, 1, &vp);
+        vkCmdSetScissor(cmd, 0, 1, &sc);
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, lightPipeLayout_, 0, 1,
+                                &lightDescSets_[currentFrame_], 0, nullptr);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+        vkCmdEndRenderPass(cmd);
+        VK_CHECK(vkEndCommandBuffer(cmd));
+        return;
+        }
+#endif
 
         // 5个清除值：position, normal, albedo, depth, finalColor
         std::array<VkClearValue, 5> clears{};
@@ -688,7 +860,8 @@ class Ch19App {
         recordCommandBuffer(commandBuffers_[currentFrame_], imgIdx);
         VkSemaphore ws[] = {imageAvailableSems_[currentFrame_]};
         VkPipelineStageFlags wst[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-        VkSemaphore ss[] = {renderFinishedSems_[currentFrame_]};
+        // Presentation 会持有该信号量，直到同一交换链图像再次被 acquire。
+        VkSemaphore ss[] = {renderFinishedSems_[imgIdx]};
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
@@ -803,7 +976,13 @@ class Ch19App {
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> ps{};
         ps[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<uint32_t>(MAX_FRAMES * 2)};
-        ps[1] = {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, static_cast<uint32_t>(MAX_FRAMES * 3)};
+        ps[1] = {
+#ifdef __APPLE__
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+#else
+            VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+#endif
+            static_cast<uint32_t>(MAX_FRAMES * 3)};
         VkDescriptorPoolCreateInfo ci{};
         ci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         ci.poolSizeCount = static_cast<uint32_t>(ps.size());
@@ -849,9 +1028,27 @@ class Ch19App {
             VK_CHECK(vkAllocateDescriptorSets(device_, &ai, lightDescSets_.data()));
             for (int i = 0; i < MAX_FRAMES; ++i) {
                 // Input Attachments（G-Buffer）
-                VkDescriptorImageInfo posII{VK_NULL_HANDLE, posView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-                VkDescriptorImageInfo nrmII{VK_NULL_HANDLE, normalView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-                VkDescriptorImageInfo albII{VK_NULL_HANDLE, albedoView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                VkDescriptorImageInfo posII{
+#ifdef __APPLE__
+                    gbufferSampler_,
+#else
+                    VK_NULL_HANDLE,
+#endif
+                    posView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                VkDescriptorImageInfo nrmII{
+#ifdef __APPLE__
+                    gbufferSampler_,
+#else
+                    VK_NULL_HANDLE,
+#endif
+                    normalView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+                VkDescriptorImageInfo albII{
+#ifdef __APPLE__
+                    gbufferSampler_,
+#else
+                    VK_NULL_HANDLE,
+#endif
+                    albedoView_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
                 VkDescriptorBufferInfo luboBI{};
                 luboBI.buffer = lightUBOs_[i];
                 luboBI.offset = 0;
@@ -863,7 +1060,11 @@ class Ch19App {
                          0,
                          0,
                          1,
+#ifdef __APPLE__
+                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+#else
                          VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+#endif
                          &posII,
                          nullptr,
                          nullptr};
@@ -873,7 +1074,11 @@ class Ch19App {
                          1,
                          0,
                          1,
+#ifdef __APPLE__
+                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+#else
                          VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+#endif
                          &nrmII,
                          nullptr,
                          nullptr};
@@ -883,7 +1088,11 @@ class Ch19App {
                          2,
                          0,
                          1,
+#ifdef __APPLE__
+                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+#else
                          VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,
+#endif
                          &albII,
                          nullptr,
                          nullptr};
@@ -902,6 +1111,29 @@ class Ch19App {
         }
     }
     void createFramebuffers() {
+#ifdef __APPLE__
+        std::array<VkImageView, 4> gbufferAttachments = {posView_, normalView_, albedoView_, depthView_};
+        VkFramebufferCreateInfo gbufferInfo{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        gbufferInfo.renderPass = renderPass_;
+        gbufferInfo.attachmentCount = static_cast<uint32_t>(gbufferAttachments.size());
+        gbufferInfo.pAttachments = gbufferAttachments.data();
+        gbufferInfo.width = swapchainExtent_.width;
+        gbufferInfo.height = swapchainExtent_.height;
+        gbufferInfo.layers = 1;
+        VK_CHECK(vkCreateFramebuffer(device_, &gbufferInfo, nullptr, &gbufferFramebuffer_));
+        framebuffers_.resize(swapchainImageViews_.size());
+        for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
+            VkFramebufferCreateInfo info{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+            info.renderPass = lightingRenderPass_;
+            info.attachmentCount = 1;
+            info.pAttachments = &swapchainImageViews_[i];
+            info.width = swapchainExtent_.width;
+            info.height = swapchainExtent_.height;
+            info.layers = 1;
+            VK_CHECK(vkCreateFramebuffer(device_, &info, nullptr, &framebuffers_[i]));
+        }
+        return;
+#endif
         framebuffers_.resize(swapchainImageViews_.size());
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
             // 5个附件顺序与 RenderPass 定义一致
@@ -1048,7 +1280,7 @@ class Ch19App {
     }
     void createSyncObjects() {
         imageAvailableSems_.resize(MAX_FRAMES);
-        renderFinishedSems_.resize(MAX_FRAMES);
+        renderFinishedSems_.resize(swapchainImages_.size());
         inFlightFences_.resize(MAX_FRAMES);
         VkSemaphoreCreateInfo sCI{};
         sCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1057,9 +1289,10 @@ class Ch19App {
         fCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         for (int i = 0; i < MAX_FRAMES; ++i) {
             VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &imageAvailableSems_[i]));
-            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &renderFinishedSems_[i]));
             VK_CHECK(vkCreateFence(device_, &fCI, nullptr, &inFlightFences_[i]));
         }
+        for (auto& semaphore : renderFinishedSems_)
+            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &semaphore));
     }
     void recreateSwapchain() {
         int w = 0, h = 0;
@@ -1071,6 +1304,12 @@ class Ch19App {
         vkDeviceWaitIdle(device_);
         for (auto& fb : framebuffers_)
             vkDestroyFramebuffer(device_, fb, nullptr);
+#ifdef __APPLE__
+        if (gbufferFramebuffer_ != VK_NULL_HANDLE) {
+            vkDestroyFramebuffer(device_, gbufferFramebuffer_, nullptr);
+            gbufferFramebuffer_ = VK_NULL_HANDLE;
+        }
+#endif
         // 重建 G-Buffer 图像（与交换链大小相同）
         auto destroyImage = [this](VkImage& i, VkDeviceMemory& m, VkImageView& v) {
             vkDestroyImageView(device_, v, nullptr);
@@ -1089,6 +1328,7 @@ class Ch19App {
         createGBufferImages();
         createFramebuffers();
         // 重新更新描述符集（Input Attachment 指向新 G-Buffer）
+        VK_CHECK(vkResetDescriptorPool(device_, descriptorPool_, 0));
         createDescriptorSets();
     }
     void cleanup() {
@@ -1103,18 +1343,27 @@ class Ch19App {
         vkDestroyDescriptorSetLayout(device_, lightSetLayout_, nullptr);
         vkDestroyBuffer(device_, vertexBuffer_, nullptr);
         vkFreeMemory(device_, vertexMemory_, nullptr);
-        for (int i = 0; i < MAX_FRAMES; ++i) {
-            vkDestroySemaphore(device_, imageAvailableSems_[i], nullptr);
-            vkDestroySemaphore(device_, renderFinishedSems_[i], nullptr);
-            vkDestroyFence(device_, inFlightFences_[i], nullptr);
-        }
+        for (VkSemaphore semaphore : imageAvailableSems_)
+            vkDestroySemaphore(device_, semaphore, nullptr);
+        for (VkSemaphore semaphore : renderFinishedSems_)
+            vkDestroySemaphore(device_, semaphore, nullptr);
+        for (VkFence fence : inFlightFences_)
+            vkDestroyFence(device_, fence, nullptr);
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         for (auto& fb : framebuffers_)
             vkDestroyFramebuffer(device_, fb, nullptr);
+#ifdef __APPLE__
+        if (gbufferFramebuffer_ != VK_NULL_HANDLE)
+            vkDestroyFramebuffer(device_, gbufferFramebuffer_, nullptr);
+        if (gbufferSampler_ != VK_NULL_HANDLE)
+            vkDestroySampler(device_, gbufferSampler_, nullptr);
+#endif
         vkDestroyPipeline(device_, geomPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, geomPipeLayout_, nullptr);
         vkDestroyPipeline(device_, lightPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, lightPipeLayout_, nullptr);
+        if (lightingRenderPass_ != VK_NULL_HANDLE)
+            vkDestroyRenderPass(device_, lightingRenderPass_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         auto destroyImage = [this](VkImage& i, VkDeviceMemory& m, VkImageView& v) {
             vkDestroyImageView(device_, v, nullptr);

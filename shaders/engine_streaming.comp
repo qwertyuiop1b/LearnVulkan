@@ -1,0 +1,22 @@
+#version 450
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer ChunkTable { vec4 chunks[]; };
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+
+float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+void main() {
+    uint grid = uint(pc.p[1].x);
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= grid * grid) return;
+    vec2 cell = vec2(id % grid, id / grid);
+    vec2 center = vec2(grid) * 0.5 + vec2(cos(pc.p[0].z * pc.p[1].y), sin(pc.p[0].z * pc.p[1].y * 0.73)) * 3.8;
+    float distanceRing = max(abs(cell.x - center.x), abs(cell.y - center.y));
+    float target = 1.0 - smoothstep(pc.p[0].w - 0.4, pc.p[0].w + 0.4, distanceRing);
+    float residency = mix(chunks[id].x, target, target > chunks[id].x ? 0.12 : 0.035);
+    float heightSeed = hash21(cell) * 0.65 + 0.2;
+    chunks[id] = vec4(residency, heightSeed, distanceRing, hash21(cell + 19.7));
+}

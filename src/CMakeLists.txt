@@ -369,12 +369,111 @@ add_advanced_chapter(85 ch85_lens_flare)
 add_advanced_chapter(86 ch86_subsurface_scattering)
 add_advanced_chapter(87 ch87_parallax_occlusion)
 add_advanced_chapter(88 ch88_dynamic_weather)
+# Engine algorithm labs: these use DemoApp for visualization but do not claim
+# an independent Vulkan rendering technique.
 add_advanced_chapter(89 ch89_navmesh_pathfinding)
+add_advanced_chapter(92 ch92_network_sync)
+
+# Engine/GPU integration demos with real compute and graphics data paths.
 add_advanced_chapter(90 ch90_scene_streaming)
 add_advanced_chapter(91 ch91_physics_integration)
-add_advanced_chapter(92 ch92_network_sync)
 add_advanced_chapter(93 ch93_procedural_animation)
 add_advanced_chapter(94 ch94_minigame_demo)
+add_advanced_chapter(95 ch95_sync2_barriers)
+
+# Standalone GPU micro-tutorials. Each target owns its pipeline variant and shaders.
+add_executable(ch96_push_constants chapters/ch96_push_constants.cpp)
+target_link_libraries(ch96_push_constants PRIVATE vulkan_tutorial_common)
+compile_shaders(ch96_push_constants)
+
+add_executable(ch97_multi_draw chapters/ch97_multi_draw.cpp)
+target_link_libraries(ch97_multi_draw PRIVATE vulkan_tutorial_common)
+compile_shaders(ch97_multi_draw)
+
+add_executable(ch98_specialization_constants chapters/ch98_specialization_constants.cpp)
+target_link_libraries(ch98_specialization_constants PRIVATE vulkan_tutorial_common)
+compile_shaders(ch98_specialization_constants)
+
+add_executable(ch99_attack_slash chapters/ch99_attack_slash.cpp)
+target_link_libraries(ch99_attack_slash PRIVATE vulkan_tutorial_common)
+compile_shaders(ch99_attack_slash)
+
+add_executable(ch100_gpu_particle_pool chapters/ch100_gpu_particle_pool.cpp)
+target_link_libraries(ch100_gpu_particle_pool PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive)
+compile_shaders(ch100_gpu_particle_pool)
+
+add_executable(ch101_procedural_heightmap chapters/ch101_procedural_heightmap.cpp)
+target_link_libraries(ch101_procedural_heightmap PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch101_procedural_heightmap)
+
+add_executable(ch102_hydraulic_erosion chapters/ch102_hydraulic_erosion.cpp)
+target_link_libraries(ch102_hydraulic_erosion PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch102_hydraulic_erosion)
+
+add_executable(ch103_gpu_clipmap_terrain chapters/ch103_gpu_clipmap_terrain.cpp)
+target_link_libraries(ch103_gpu_clipmap_terrain PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch103_gpu_clipmap_terrain)
+
+add_executable(ch104_procedural_biomes chapters/ch104_procedural_biomes.cpp)
+target_link_libraries(ch104_procedural_biomes PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch104_procedural_biomes)
+
+add_executable(ch105_procedural_vegetation chapters/ch105_procedural_vegetation.cpp)
+target_link_libraries(ch105_procedural_vegetation PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch105_procedural_vegetation)
+
+add_executable(ch106_marching_cubes chapters/ch106_marching_cubes.cpp)
+target_link_libraries(ch106_marching_cubes PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch106_marching_cubes)
+
+add_executable(ch107_sdf_caves chapters/ch107_sdf_caves.cpp)
+target_link_libraries(ch107_sdf_caves PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch107_sdf_caves)
+
+add_executable(ch108_procedural_rivers_roads chapters/ch108_procedural_rivers_roads.cpp)
+target_link_libraries(ch108_procedural_rivers_roads PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+    vulkan_tutorial_interactive vulkan_tutorial_engine)
+compile_shaders(ch108_procedural_rivers_roads)
+
+# Production Vulkan engineering chapters.
+foreach(PRODUCTION_CHAPTER
+        ch109_sync2_multiqueue
+        ch110_frame_context
+        ch111_async_upload
+        ch112_swapchain_pacing
+        ch113_capability_profile
+        ch114_debug_diagnostics)
+    add_executable(${PRODUCTION_CHAPTER} chapters/${PRODUCTION_CHAPTER}.cpp)
+    target_link_libraries(${PRODUCTION_CHAPTER} PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+        vulkan_tutorial_interactive vulkan_tutorial_engine)
+    compile_shaders(${PRODUCTION_CHAPTER})
+endforeach()
+
+add_executable(ch115_headless_tests chapters/ch115_headless_tests.cpp)
+target_link_libraries(ch115_headless_tests PRIVATE vulkan_tutorial_common)
+compile_shaders(ch115_headless_tests)
+if(BUILD_TESTING)
+    add_test(NAME ch115_headless COMMAND ch115_headless_tests)
+    set_tests_properties(ch115_headless PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+foreach(PRODUCTION_GRAPH_CHAPTER
+        ch116_render_graph2
+        ch117_shader_pipeline_toolchain
+        ch118_gpu_profiling2)
+    add_executable(${PRODUCTION_GRAPH_CHAPTER} chapters/${PRODUCTION_GRAPH_CHAPTER}.cpp)
+    target_link_libraries(${PRODUCTION_GRAPH_CHAPTER} PRIVATE vulkan_tutorial_common vulkan_tutorial_assets
+        vulkan_tutorial_interactive vulkan_tutorial_engine)
+    compile_shaders(${PRODUCTION_GRAPH_CHAPTER})
+endforeach()
 
 # ─── Engine chapters macro ────────────────────────────────────────────────────
 # 使用宏简化重复注册

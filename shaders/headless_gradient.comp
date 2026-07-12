@@ -1,0 +1,18 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0, std430) buffer Pixels { vec4 pixels[]; } image;
+layout(push_constant) uniform Params { vec4 p; } params;
+
+void main() {
+    uint width = uint(params.p.x);
+    uint height = uint(params.p.y);
+    uvec2 id = gl_GlobalInvocationID.xy;
+    if (id.x >= width || id.y >= height) return;
+    vec2 uv = (vec2(id) + 0.5) / vec2(width, height);
+    vec2 centered = uv * 2.0 - 1.0;
+    float disk = exp(-18.0 * dot(centered - vec2(0.18, -0.12), centered - vec2(0.18, -0.12)));
+    vec3 color = mix(vec3(0.02, 0.035, 0.12), vec3(0.08, 0.62, 1.0), uv.y);
+    color += vec3(1.0, 0.22, 0.04) * disk;
+    image.pixels[id.x + id.y * width] = vec4(color, 1.0);
+}

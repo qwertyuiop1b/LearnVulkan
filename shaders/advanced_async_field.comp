@@ -1,0 +1,31 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) writeonly buffer FieldBuffer { vec4 values[]; } field;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+void main() {
+    uvec2 size = uvec2(pc.p[1].xy + 0.5);
+    uvec2 pixel = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    vec2 p = uv * 2.0 - 1.0;
+    p.x *= float(size.x) / float(size.y);
+    float time = pc.p[0].z;
+    float wave = 0.0;
+    vec2 gradient = vec2(0.0);
+    for (int source = 0; source < 7; ++source) {
+        float phase = float(source) * 0.897;
+        vec2 center = vec2(sin(time * 0.31 + phase), cos(time * 0.27 + phase * 1.7)) * 0.62;
+        vec2 delta = p - center;
+        float distanceToSource = length(delta);
+        float pulse = sin(distanceToSource * 24.0 - time * 4.2 + phase) * exp(-distanceToSource * 2.4);
+        wave += pulse;
+        gradient += normalize(delta + vec2(1e-4)) * pulse;
+    }
+    wave /= 7.0;
+    vec3 color = mix(vec3(0.015, 0.035, 0.09), vec3(0.04, 0.78, 1.25), smoothstep(-0.45, 0.62, wave));
+    color += vec3(1.2, 0.18, 0.04) * pow(max(wave, 0.0), 3.0) * 2.0;
+    field.values[pixel.x + pixel.y * size.x] = vec4(color, length(gradient));
+}

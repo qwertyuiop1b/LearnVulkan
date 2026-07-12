@@ -75,12 +75,19 @@ bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info) {
     ImGui::StyleColorsDark();
 
     // ── 加载中文字体（支持汉字显示）──────────────────────────────────────────
+    // ImGui 尺寸使用窗口逻辑像素；GLFW backend 会单独处理 Retina
+    // framebuffer scale。不要把 Retina 比例再次乘到字体大小上。
+#ifdef __APPLE__
+    constexpr float kUiFontSize = 12.0f;
+#else
+    constexpr float kUiFontSize = 16.0f;
+#endif
     // 按优先级尝试多个字体路径（macOS / Linux）
     static const char* kCjkFontCandidates[] = {// macOS
-                                               "/System/Library/Fonts/STHeiti Light.ttc",
-                                               "/System/Library/Fonts/STHeiti Medium.ttc",
-                                               "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
                                                "/System/Library/Fonts/PingFang.ttc",
+                                               "/System/Library/Fonts/STHeiti Medium.ttc",
+                                               "/System/Library/Fonts/STHeiti Light.ttc",
+                                               "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
                                                // Linux (Noto CJK)
                                                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
                                                "/usr/share/fonts/noto-cjk/NotoSansCJKsc-Regular.otf",
@@ -93,19 +100,24 @@ bool InteractiveChapterTools::initVulkan(const InteractiveInitInfo& info) {
             continue;
         // 第 0 步：先加载 ASCII 字形（保证英文清晰）
         ImFontConfig latinCfg;
-        latinCfg.SizePixels = 16.0f;
+        latinCfg.SizePixels = kUiFontSize;
         latinCfg.OversampleH = 2;
         latinCfg.OversampleV = 2;
-        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], 16.0f, &latinCfg, io.Fonts->GetGlyphRangesDefault());
+        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], kUiFontSize, &latinCfg, io.Fonts->GetGlyphRangesDefault());
         // 第 1 步：Merge 中文字形到同一字体（合并模式）
         ImFontConfig cjkCfg;
         cjkCfg.MergeMode = true;
         cjkCfg.OversampleH = 1; // CJK 不需要高倍过采样
         cjkCfg.OversampleV = 1;
         cjkCfg.GlyphOffset = {0.0f, 1.0f}; // 微调垂直对齐
-        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], 16.0f, &cjkCfg, io.Fonts->GetGlyphRangesChineseFull());
+        io.Fonts->AddFontFromFileTTF(kCjkFontCandidates[k], kUiFontSize, &cjkCfg, io.Fonts->GetGlyphRangesChineseFull());
         io.Fonts->Build();
         cjkLoaded = true;
+        int windowWidth = 0, windowHeight = 0, framebufferWidth = 0, framebufferHeight = 0;
+        glfwGetWindowSize(info_.window, &windowWidth, &windowHeight);
+        glfwGetFramebufferSize(info_.window, &framebufferWidth, &framebufferHeight);
+        std::cerr << "[ImGui] font=" << kUiFontSize << "px, window=" << windowWidth << "x" << windowHeight
+                  << ", framebuffer=" << framebufferWidth << "x" << framebufferHeight << "\n";
         break;
     }
     if (!cjkLoaded) {

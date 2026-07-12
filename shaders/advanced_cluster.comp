@@ -1,0 +1,41 @@
+#version 450
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) writeonly buffer ClusterCounts { uint counts[]; } clusterCounts;
+layout(std430, set = 0, binding = 1) writeonly buffer ClusterLists { uint indices[]; } clusterLists;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+vec4 lightData(uint index) {
+    float fi = float(index);
+    float angle = fi * 2.39996323 + pc.p[0].z * (0.18 + mod(fi, 5.0) * 0.025);
+    float ring = 0.12 + 0.36 * fract(fi * 0.618034);
+    vec2 screen = vec2(0.5) + vec2(cos(angle), sin(angle * 1.13)) * ring;
+    float depth = 0.04 + 0.92 * fract(fi * 0.75487766);
+    return vec4(screen, depth, 0.08 + 0.08 * fract(fi * 0.37));
+}
+
+void main() {
+    uvec3 dimensions = uvec3(pc.p[1].xyz + 0.5);
+    uvec3 coordinate = gl_GlobalInvocationID.xyz;
+    if (any(greaterThanEqual(coordinate, dimensions)))
+        return;
+    uint maxLights = uint(pc.p[1].w + 0.5);
+    uint lightCount = uint(pc.p[0].w + 0.5);
+    uint clusterIndex = coordinate.x + coordinate.y * dimensions.x +
+                        coordinate.z * dimensions.x * dimensions.y;
+    vec2 tileMin = vec2(coordinate.xy) / vec2(dimensions.xy);
+    vec2 tileMax = vec2(coordinate.xy + uvec2(1)) / vec2(dimensions.xy);
+    float sliceMin = float(coordinate.z) / float(dimensions.z);
+    float sliceMax = float(coordinate.z + 1u) / float(dimensions.z);
+    uint count = 0u;
+    for (uint lightIndex = 0u; lightIndex < lightCount && count < maxLights; ++lightIndex) {
+        vec4 light = lightData(lightIndex);
+        float radius = light.w;
+        bool overlapsXY = all(greaterThanEqual(light.xy + radius, tileMin)) &&
+                          all(lessThanEqual(light.xy - radius, tileMax));
+        bool overlapsZ = light.z + radius >= sliceMin && light.z - radius <= sliceMax;
+        if (overlapsXY && overlapsZ)
+            clusterLists.indices[clusterIndex * maxLights + count++] = lightIndex;
+    }
+    clusterCounts.counts[clusterIndex] = count;
+}

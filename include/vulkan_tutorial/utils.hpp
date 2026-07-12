@@ -189,6 +189,7 @@ inline std::vector<char> readFile(const std::string& filename) {
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily; ///< 支持图形命令的队列族
     std::optional<uint32_t> presentFamily;  ///< 支持窗口呈现的队列族
+    std::optional<uint32_t> computeFamily;  ///< 优先选择不含 graphics 的独立计算队列族
 
     /// 两个队列族都已找到则返回 true
     [[nodiscard]] bool isComplete() const {
@@ -206,17 +207,23 @@ inline QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKH
     vkGetPhysicalDeviceQueueFamilyProperties(device, &count, families.data());
 
     for (uint32_t i = 0; i < count; ++i) {
-        if (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && !indices.graphicsFamily)
             indices.graphicsFamily = i;
+
+        if (families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+            const bool dedicated = (families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0;
+            if (!indices.computeFamily || dedicated)
+                indices.computeFamily = i;
+        }
 
         VkBool32 presentSupport = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
         if (presentSupport)
             indices.presentFamily = i;
 
-        if (indices.isComplete())
-            break;
     }
+    if (!indices.computeFamily)
+        indices.computeFamily = indices.graphicsFamily;
     return indices;
 }
 

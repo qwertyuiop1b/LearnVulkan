@@ -56,6 +56,16 @@ constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2; // 最多允许 2 帧同时在飞行
 
+#if defined(CH96_PUSH_CONSTANTS) || defined(CH97_MULTI_DRAW) || defined(CH99_ATTACK_SLASH)
+struct DrawPushConstants {
+    float time;
+    float offsetX;
+    float offsetY;
+    float scale;
+    float hue;
+};
+#endif
+
 class Ch08App {
   public:
     void run() {
@@ -96,11 +106,23 @@ class Ch08App {
     uint32_t currentFrame_ = 0;
 
     bool framebufferResized_ = false;
+    float animationTime_ = 0.0f;
 
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(WIDTH, HEIGHT, "Ch08 - 彩色三角形 ★", nullptr, nullptr);
+#ifdef CH96_PUSH_CONSTANTS
+        const char* title = "Ch96 - Push Constants: Animated Triangle";
+#elif defined(CH97_MULTI_DRAW)
+        const char* title = "Ch97 - Per-Draw Push Constants";
+#elif defined(CH98_SPECIALIZATION_CONSTANTS)
+        const char* title = "Ch98 - Specialization Constants";
+#elif defined(CH99_ATTACK_SLASH)
+        const char* title = "Ch99 - GPU Attack Slash Effect";
+#else
+        const char* title = "Ch08 - 彩色三角形 ★";
+#endif
+        window_ = glfwCreateWindow(WIDTH, HEIGHT, title, nullptr, nullptr);
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, framebufferResizeCallback);
     }
@@ -282,7 +304,11 @@ class Ch08App {
         bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         VK_CHECK(vkBeginCommandBuffer(cmd, &bi));
 
+#ifdef CH99_ATTACK_SLASH
+        VkClearValue clearColor = {{{0.012f, 0.016f, 0.028f, 1.0f}}};
+#else
         VkClearValue clearColor = {{{0.02f, 0.02f, 0.05f, 1.0f}}};
+#endif
         VkRenderPassBeginInfo rpBI{};
         rpBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         rpBI.renderPass = renderPass_;
@@ -299,7 +325,31 @@ class Ch08App {
         VkRect2D sc{{0, 0}, swapchainExtent_};
         vkCmdSetScissor(cmd, 0, 1, &sc);
 
+#ifdef CH96_PUSH_CONSTANTS
+        DrawPushConstants push{animationTime_, 0.0f, 0.0f, 0.72f, 0.5f + 0.5f * std::sin(animationTime_)};
+        vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(push), &push);
+        vkCmdDraw(cmd, 3, 1, 0, 0);
+#elif defined(CH97_MULTI_DRAW)
+        for (int y = -2; y <= 2; ++y) {
+            for (int x = -3; x <= 3; ++x) {
+                DrawPushConstants push{animationTime_, float(x) * 0.27f, float(y) * 0.34f, 0.16f,
+                                       float((x + 3) + (y + 2) * 7) / 35.0f};
+                vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                                   0, sizeof(push), &push);
+                vkCmdDraw(cmd, 3, 1, 0, 0);
+            }
+        }
+#elif defined(CH99_ATTACK_SLASH)
+        DrawPushConstants push{animationTime_, 0.0f, 0.0f, float(swapchainExtent_.width),
+                               float(swapchainExtent_.height)};
+        vkCmdPushConstants(cmd, pipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(push), &push);
+        // Two procedural 3D ribbons, 64 segments each, 2 triangles per segment.
+        vkCmdDraw(cmd, 2 * 64 * 6, 1, 0, 0);
+#else
         vkCmdDraw(cmd, 3, 1, 0, 0); // 3 顶点，1 实例
+#endif
         vkCmdEndRenderPass(cmd);
         VK_CHECK(vkEndCommandBuffer(cmd));
     }
@@ -313,6 +363,8 @@ class Ch08App {
 
         while (!glfwWindowShouldClose(window_)) {
             glfwPollEvents();
+
+            animationTime_ = std::chrono::duration<float>(std::chrono::steady_clock::now() - startTime).count();
 
             if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
                 glfwSetWindowShouldClose(window_, GLFW_TRUE);
@@ -349,9 +401,11 @@ class Ch08App {
 #ifdef __APPLE__
         ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
-        if (ENABLE_VALIDATION_LAYERS) {
+        if (ENABLE_VALIDATION_LAYERS && checkValidationLayerSupport()) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
+        } else if (ENABLE_VALIDATION_LAYERS) {
+            std::cerr << "[Vulkan] validation layer unavailable; continuing without it.\n";
         }
         VK_CHECK(vkCreateInstance(&ci, nullptr, &instance_));
     }
@@ -493,8 +547,19 @@ class Ch08App {
     void createGraphicsPipeline() {
         // triangle.vert: 顶点坐标硬编码在着色器内（无顶点缓冲输入）
         // triangle.frag: 输出光栅化插值得到的颜色
+#if defined(CH96_PUSH_CONSTANTS) || defined(CH97_MULTI_DRAW)
+        VkShaderModule vert = createShaderModuleFromFile(device_, "push_constants.vert.spv");
+        VkShaderModule frag = createShaderModuleFromFile(device_, "push_constants.frag.spv");
+#elif defined(CH99_ATTACK_SLASH)
+        VkShaderModule vert = createShaderModuleFromFile(device_, "attack_slash.vert.spv");
+        VkShaderModule frag = createShaderModuleFromFile(device_, "attack_slash.frag.spv");
+#elif defined(CH98_SPECIALIZATION_CONSTANTS)
+        VkShaderModule vert = createShaderModuleFromFile(device_, "triangle.vert.spv");
+        VkShaderModule frag = createShaderModuleFromFile(device_, "specialization.frag.spv");
+#else
         VkShaderModule vert = createShaderModuleFromFile(device_, "triangle.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "triangle.frag.spv");
+#endif
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                      nullptr,
@@ -510,6 +575,21 @@ class Ch08App {
                      frag,
                      "main",
                      nullptr};
+#ifdef CH98_SPECIALIZATION_CONSTANTS
+        const uint32_t colorMode = 2;
+        const float stripeFrequency = 18.0f;
+        VkSpecializationMapEntry specEntries[] = {{0, 0, sizeof(colorMode)}, {1, sizeof(colorMode), sizeof(stripeFrequency)}};
+        struct SpecializationData {
+            uint32_t mode;
+            float frequency;
+        } specData{colorMode, stripeFrequency};
+        VkSpecializationInfo specInfo{};
+        specInfo.mapEntryCount = 2;
+        specInfo.pMapEntries = specEntries;
+        specInfo.dataSize = sizeof(specData);
+        specInfo.pData = &specData;
+        stages[1].pSpecializationInfo = &specInfo;
+#endif
         VkPipelineVertexInputStateCreateInfo vi{};
         vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -523,13 +603,26 @@ class Ch08App {
         rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
         rs.polygonMode = VK_POLYGON_MODE_FILL;
         rs.lineWidth = 1.0f;
+#ifdef CH99_ATTACK_SLASH
+        rs.cullMode = VK_CULL_MODE_NONE;
+#else
         rs.cullMode = VK_CULL_MODE_BACK_BIT;
+#endif
         rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
         VkPipelineMultisampleStateCreateInfo ms{};
         ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
         VkPipelineColorBlendAttachmentState cba{};
         cba.colorWriteMask = 0xf;
+#ifdef CH99_ATTACK_SLASH
+        cba.blendEnable = VK_TRUE;
+        cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+        cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        cba.colorBlendOp = VK_BLEND_OP_ADD;
+        cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        cba.alphaBlendOp = VK_BLEND_OP_ADD;
+#endif
         VkPipelineColorBlendStateCreateInfo cb{};
         cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         cb.attachmentCount = 1;
@@ -541,6 +634,18 @@ class Ch08App {
         ds.pDynamicStates = dyn.data();
         VkPipelineLayoutCreateInfo pli{};
         pli.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+#if defined(CH96_PUSH_CONSTANTS) || defined(CH97_MULTI_DRAW) || defined(CH99_ATTACK_SLASH)
+        VkPushConstantRange pushRange{};
+#ifdef CH99_ATTACK_SLASH
+        pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+#else
+        pushRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+#endif
+        pushRange.offset = 0;
+        pushRange.size = sizeof(DrawPushConstants);
+        pli.pushConstantRangeCount = 1;
+        pli.pPushConstantRanges = &pushRange;
+#endif
         VK_CHECK(vkCreatePipelineLayout(device_, &pli, nullptr, &pipelineLayout_));
         VkGraphicsPipelineCreateInfo pi{};
         pi.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;

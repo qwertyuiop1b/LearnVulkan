@@ -98,6 +98,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
@@ -184,17 +185,12 @@ class Ch20App {
     void run() {
         initWindow();
 
-        // 检查光线追踪支持
         if (!initVulkan()) {
-            std::cout << "\n⚠️  此设备不支持光线追踪，请查看代码了解 API "
-                         "结构。\n";
-            printRayTracingGuide();
-            glfwDestroyWindow(window_);
-            glfwTerminate();
             return;
         }
 
-        std::cout << "\n🔭 光线追踪管线已初始化！开始渲染...\n";
+        std::cout << "\n🔭 " << (useComputeFallback_ ? "软件光线追踪回退路径" : "硬件光线追踪管线")
+                  << "已初始化！开始渲染...\n";
         mainLoop();
         cleanup();
     }
@@ -217,6 +213,14 @@ class Ch20App {
     VkDescriptorSet       rtDescSet_       = VK_NULL_HANDLE;
     VkPipelineLayout rtPipelineLayout_ = VK_NULL_HANDLE;
     VkPipeline rtPipeline_ = VK_NULL_HANDLE;
+
+    // MoltenVK 回退路径：计算着色器逐像素完成解析球体求交。
+    bool useComputeFallback_ = false;
+    VkDescriptorSetLayout fallbackDescSetLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool fallbackDescPool_ = VK_NULL_HANDLE;
+    VkDescriptorSet fallbackDescSet_ = VK_NULL_HANDLE;
+    VkPipelineLayout fallbackPipelineLayout_ = VK_NULL_HANDLE;
+    VkPipeline fallbackPipeline_ = VK_NULL_HANDLE;
 
     // ── SBT 区域（由 createShaderBindingTable 填写） ────────────────────
     VkStridedDeviceAddressRegionKHR sbtRgen_{}, sbtMiss_{}, sbtHit_{}, sbtCall_{};
@@ -282,18 +286,26 @@ class Ch20App {
         try {
             createInstance();
             createSurface();
-            if (!pickPhysicalDeviceRT())
-                return false; // 检查 RT 支持
-            createLogicalDeviceRT();
-            loadRTFunctionPointers();
+            if (pickPhysicalDeviceRT()) {
+                createLogicalDeviceRT();
+                loadRTFunctionPointers();
+            } else {
+                useComputeFallback_ = true;
+                pickPhysicalDeviceFallback();
+                createLogicalDeviceFallback();
+            }
             createSwapchain();
             createImageViews();
             createCommandPool();
             createRTOutputImage();
-            createAccumImage();
-            buildAccelerationStructures();
-            createRTPipeline();
-            createShaderBindingTable();
+            if (useComputeFallback_) {
+                createFallbackPipeline();
+            } else {
+                createAccumImage();
+                buildAccelerationStructures();
+                createRTPipeline();
+                createShaderBindingTable();
+            }
             createCommandBuffers();
             createSyncObjects();
         } catch (const std::exception& e) {
@@ -301,6 +313,63 @@ class Ch20App {
             return false;
         }
         return true;
+    }
+
+    void pickPhysicalDeviceFallback() {
+        uint32_t count = 0;
+        VK_CHECK(vkEnumeratePhysicalDevices(instance_, &count, nullptr));
+        std::vector<VkPhysicalDevice> devices(count);
+        VK_CHECK(vkEnumeratePhysicalDevices(instance_, &count, devices.data()));
+        for (VkPhysicalDevice candidate : devices) {
+            if (!findQueueFamilies(candidate, surface_).isComplete())
+                continue;
+            uint32_t extCount = 0;
+            vkEnumerateDeviceExtensionProperties(candidate, nullptr, &extCount, nullptr);
+            std::vector<VkExtensionProperties> extensions(extCount);
+            vkEnumerateDeviceExtensionProperties(candidate, nullptr, &extCount, extensions.data());
+            const bool hasSwapchain = std::any_of(extensions.begin(), extensions.end(), [](const auto& extension) {
+                return std::strcmp(extension.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0;
+            });
+            if (!hasSwapchain)
+                continue;
+            physicalDevice_ = candidate;
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(candidate, &properties);
+            std::cout << "⚠️  使用 Compute Shader 软件光线追踪：" << properties.deviceName << "\n";
+            return;
+        }
+        throw std::runtime_error("未找到支持交换链与计算着色器的 GPU");
+    }
+
+    void createLogicalDeviceFallback() {
+        queueIndices_ = findQueueFamilies(physicalDevice_, surface_);
+        std::set<uint32_t> families = {queueIndices_.graphicsFamily.value(), queueIndices_.presentFamily.value()};
+        const float priority = 1.0f;
+        std::vector<VkDeviceQueueCreateInfo> queues;
+        for (uint32_t family : families) {
+            VkDeviceQueueCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+            info.queueFamilyIndex = family;
+            info.queueCount = 1;
+            info.pQueuePriorities = &priority;
+            queues.push_back(info);
+        }
+        std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        uint32_t extCount = 0;
+        vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount, nullptr);
+        std::vector<VkExtensionProperties> available(extCount);
+        vkEnumerateDeviceExtensionProperties(physicalDevice_, nullptr, &extCount, available.data());
+        for (const auto& extension : available)
+            if (std::strcmp(extension.extensionName, "VK_KHR_portability_subset") == 0)
+                extensions.push_back("VK_KHR_portability_subset");
+
+        VkDeviceCreateInfo info{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+        info.queueCreateInfoCount = static_cast<uint32_t>(queues.size());
+        info.pQueueCreateInfos = queues.data();
+        info.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        info.ppEnabledExtensionNames = extensions.data();
+        VK_CHECK(vkCreateDevice(physicalDevice_, &info, nullptr, &device_));
+        vkGetDeviceQueue(device_, queueIndices_.graphicsFamily.value(), 0, &graphicsQueue_);
+        vkGetDeviceQueue(device_, queueIndices_.presentFamily.value(), 0, &presentQueue_);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -1013,6 +1082,62 @@ class Ch20App {
         endSingleTimeCommands(cmd);
     }
 
+    void createFallbackPipeline() {
+        VkDescriptorSetLayoutBinding outputBinding{};
+        outputBinding.binding = 0;
+        outputBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        outputBinding.descriptorCount = 1;
+        outputBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &outputBinding;
+        VK_CHECK(vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &fallbackDescSetLayout_));
+
+        VkPushConstantRange pushRange{};
+        pushRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+        pushRange.size = sizeof(uint32_t) * 3; // width, height, frame
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &fallbackDescSetLayout_;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushRange;
+        VK_CHECK(vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &fallbackPipelineLayout_));
+
+        VkShaderModule shader = createShaderModuleFromFile(device_, "raytrace_fallback.comp.spv");
+        VkComputePipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO};
+        pipelineInfo.layout = fallbackPipelineLayout_;
+        pipelineInfo.stage = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                              nullptr,
+                              0,
+                              VK_SHADER_STAGE_COMPUTE_BIT,
+                              shader,
+                              "main",
+                              nullptr};
+        VK_CHECK(vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &fallbackPipeline_));
+        vkDestroyShaderModule(device_, shader, nullptr);
+
+        VkDescriptorPoolSize poolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1};
+        VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+        poolInfo.maxSets = 1;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        VK_CHECK(vkCreateDescriptorPool(device_, &poolInfo, nullptr, &fallbackDescPool_));
+        VkDescriptorSetAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+        allocateInfo.descriptorPool = fallbackDescPool_;
+        allocateInfo.descriptorSetCount = 1;
+        allocateInfo.pSetLayouts = &fallbackDescSetLayout_;
+        VK_CHECK(vkAllocateDescriptorSets(device_, &allocateInfo, &fallbackDescSet_));
+        VkDescriptorImageInfo imageInfo{VK_NULL_HANDLE, rtOutputView_, VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = fallbackDescSet_;
+        write.dstBinding = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        write.pImageInfo = &imageInfo;
+        vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+        std::cout << "✅ Compute 软件光线追踪管线已创建\n";
+    }
+
     void createRTOutputImage() {
         // 光线追踪写入存储图像（VK_IMAGE_USAGE_STORAGE_BIT）
         // 渲染完成后 blit 到交换链图像显示
@@ -1022,7 +1147,8 @@ class Ch20App {
         ci.extent = {swapchainExtent_.width, swapchainExtent_.height, 1};
         ci.mipLevels = 1;
         ci.arrayLayers = 1;
-        ci.format = VK_FORMAT_B8G8R8A8_UNORM;
+        // rgba8 是 Vulkan storage image 的通用格式，MoltenVK 可映射到 Metal texture。
+        ci.format = VK_FORMAT_R8G8B8A8_UNORM;
         ci.tiling = VK_IMAGE_TILING_OPTIMAL;
         ci.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         ci.usage = VK_IMAGE_USAGE_STORAGE_BIT |     // 光线追踪着色器写入
@@ -1043,7 +1169,7 @@ class Ch20App {
         vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         vci.image = rtOutputImage_;
         vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        vci.format = VK_FORMAT_B8G8R8A8_UNORM;
+        vci.format = VK_FORMAT_R8G8B8A8_UNORM;
         vci.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
         VK_CHECK(vkCreateImageView(device_, &vci, nullptr, &rtOutputView_));
 
@@ -1066,9 +1192,11 @@ class Ch20App {
         barrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        const VkPipelineStageFlags shaderStage = useComputeFallback_ ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                                                                       : VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
         vkCmdPipelineBarrier(cmd,
                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                             shaderStage,
                              0,
                              0,
                              nullptr,
@@ -1077,18 +1205,25 @@ class Ch20App {
                              1,
                              &barrier);
 
-        // ── 绑定光线追踪管线 ──────────────────────────────────────────────
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline_);
-        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-                                rtPipelineLayout_, 0, 1, &rtDescSet_, 0, nullptr);
-        vkCmdPushConstants(cmd, rtPipelineLayout_, VK_SHADER_STAGE_RAYGEN_BIT_KHR,
-                           0, sizeof(uint32_t), &accumFrameCount_);
-
-        // ── 发射光线！ ─────────────────────────────────────────────────────
-        // vkCmdTraceRaysKHR 替代 vkCmdDraw
-        // 参数：SBT 各部分的 DeviceAddress + 像素尺寸
-
-        if (fpCmdTraceRays_) {
+        if (useComputeFallback_) {
+            const uint32_t pushConstants[] = {swapchainExtent_.width, swapchainExtent_.height, accumFrameCount_};
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, fallbackPipeline_);
+            vkCmdBindDescriptorSets(cmd,
+                                    VK_PIPELINE_BIND_POINT_COMPUTE,
+                                    fallbackPipelineLayout_,
+                                    0,
+                                    1,
+                                    &fallbackDescSet_,
+                                    0,
+                                    nullptr);
+            vkCmdPushConstants(cmd,
+                               fallbackPipelineLayout_,
+                               VK_SHADER_STAGE_COMPUTE_BIT,
+                               0,
+                               sizeof(pushConstants),
+                               pushConstants);
+            vkCmdDispatch(cmd, (swapchainExtent_.width + 7) / 8, (swapchainExtent_.height + 7) / 8, 1);
+        } else if (fpCmdTraceRays_) {
             fpCmdTraceRays_(cmd,
                             &sbtRgen_,
                             &sbtMiss_,
@@ -1106,7 +1241,7 @@ class Ch20App {
         barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         vkCmdPipelineBarrier(cmd,
-                             VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+                             shaderStage,
                              VK_PIPELINE_STAGE_TRANSFER_BIT,
                              0,
                              0,
@@ -1183,8 +1318,10 @@ class Ch20App {
         vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
         recordRTCommandBuffer(commandBuffers_[currentFrame_], imgIdx);
         VkSemaphore ws[] = {imageAvailableSems_[currentFrame_]};
-        VkPipelineStageFlags wst[] = {VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR};
-        VkSemaphore ss[] = {renderFinishedSems_[currentFrame_]};
+        VkPipelineStageFlags wst[] = {useComputeFallback_ ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                                                            : VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR};
+        // 呈现操作会继续持有该信号量，直到同一交换链图像再次被 acquire。
+        VkSemaphore ss[] = {renderFinishedSems_[imgIdx]};
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
@@ -1414,7 +1551,7 @@ class Ch20App {
     }
     void createSyncObjects() {
         imageAvailableSems_.resize(2);
-        renderFinishedSems_.resize(2);
+        renderFinishedSems_.resize(swapchainImages_.size());
         inFlightFences_.resize(2);
         VkSemaphoreCreateInfo sCI{};
         sCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -1423,11 +1560,20 @@ class Ch20App {
         fCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         for (int i = 0; i < 2; ++i) {
             VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &imageAvailableSems_[i]));
-            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &renderFinishedSems_[i]));
             VK_CHECK(vkCreateFence(device_, &fCI, nullptr, &inFlightFences_[i]));
         }
+        for (auto& semaphore : renderFinishedSems_)
+            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &semaphore));
     }
     void cleanup() {
+        if (fallbackPipeline_ != VK_NULL_HANDLE)
+            vkDestroyPipeline(device_, fallbackPipeline_, nullptr);
+        if (fallbackPipelineLayout_ != VK_NULL_HANDLE)
+            vkDestroyPipelineLayout(device_, fallbackPipelineLayout_, nullptr);
+        if (fallbackDescPool_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorPool(device_, fallbackDescPool_, nullptr);
+        if (fallbackDescSetLayout_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device_, fallbackDescSetLayout_, nullptr);
         if (blas_ != VK_NULL_HANDLE)
             fpDestroyAccelStructure_(device_, blas_, nullptr);
         if (tlas_ != VK_NULL_HANDLE)
@@ -1468,13 +1614,12 @@ class Ch20App {
             vkDestroyDescriptorPool(device_, rtDescPool_, nullptr);
         if (rtDescSetLayout_ != VK_NULL_HANDLE)
             vkDestroyDescriptorSetLayout(device_, rtDescSetLayout_, nullptr);
-        for (int i = 0; i < 2; ++i) {
-            if (i < (int)imageAvailableSems_.size()) {
-                vkDestroySemaphore(device_, imageAvailableSems_[i], nullptr);
-                vkDestroySemaphore(device_, renderFinishedSems_[i], nullptr);
-                vkDestroyFence(device_, inFlightFences_[i], nullptr);
-            }
-        }
+        for (VkSemaphore semaphore : imageAvailableSems_)
+            vkDestroySemaphore(device_, semaphore, nullptr);
+        for (VkSemaphore semaphore : renderFinishedSems_)
+            vkDestroySemaphore(device_, semaphore, nullptr);
+        for (VkFence fence : inFlightFences_)
+            vkDestroyFence(device_, fence, nullptr);
         if (commandPool_)
             vkDestroyCommandPool(device_, commandPool_, nullptr);
         for (auto& iv : swapchainImageViews_)
@@ -1495,11 +1640,10 @@ class Ch20App {
 int main() {
     std::cout << "═══════════════════════════════════════════════════════════════"
                  "════\n";
-    std::cout << " 第20章：硬件光线追踪（VK_KHR_ray_tracing_pipeline）\n";
+    std::cout << " 第20章：光线追踪（硬件 RT + Compute 回退）\n";
     std::cout << "\n";
-    std::cout << " ⚠️  需要 NVIDIA RTX / AMD RDNA2+ GPU\n";
-    std::cout << " ⚠️  macOS/MoltenVK 暂不支持（Metal 光线追踪 API "
-                 "不同）\n";
+    std::cout << " ✅ NVIDIA RTX / AMD RDNA2+：VK_KHR_ray_tracing_pipeline\n";
+    std::cout << " ✅ macOS/MoltenVK：Compute Shader 软件光线追踪回退\n";
     std::cout << "═══════════════════════════════════════════════════════════════"
                  "════\n\n";
     Ch20App app;

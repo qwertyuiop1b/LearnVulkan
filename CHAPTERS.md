@@ -1,4 +1,4 @@
-# Vulkan 教程章节目录（94章完整路线图）
+# Vulkan 教程章节目录（108章完整路线图）
 
 ## 第一部分：Vulkan 基础管线（ch01–ch14）
 
@@ -104,22 +104,22 @@
 
 | 章节 | 主题 | 核心概念 |
 |------|------|---------|
-| ch71 | 景深 DoF | CoC / 散景模糊 / 焦点距离 |
-| ch72 | 运动模糊 | 速度缓冲 / 屏幕空间模糊 |
-| ch73 | 大气散射 | Rayleigh / Mie / 天空颜色 |
-| ch74 | SSGI | 屏幕空间全局光照 |
-| ch75 | LUT 调色 | 3D LUT / 色彩分级预设 |
-| ch76 | Clustered Forward | 光源聚类 / Forward+ |
-| ch77 | 虚拟纹理 | 页表 / 按需加载 |
-| ch78 | Async Compute | Timeline Semaphore / 双队列 |
-| ch79 | 地形 LOD | 四叉树 / 曲面细分 |
-| ch80 | 植被渲染 | Instancing / 风场动画 |
-| ch81 | Descriptor Buffer | 绑定模型 2.0 |
-| ch82 | DGC | 设备生成命令 |
-| ch83 | ReSTIR | 实时路径追踪 |
+| ch71 | 景深 DoF | GPU 多光圈采样 / CoC / 焦点距离 |
+| ch72 | 运动模糊 | 时间域多采样 / 快门角度 / 动态场景 |
+| ch73 | 大气散射 | Rayleigh / Mie / 视线体积积分 |
+| ch74 | SSGI | 屏幕邻域采样 / 间接光 / AO |
+| ch75 | LUT 调色 | Compute 生成 3D LUT / 三线性采样 / 预设混合 |
+| ch76 | Clustered Forward | Compute 光源聚类 / SSBO 光源列表 / Forward+ |
+| ch77 | 虚拟纹理 | GPU 页表 / 驻留预算 / 缺页可视化 |
+| ch78 | Compute/Graphics 调度 | Compute 场模拟 / Pipeline Barrier / 队列能力检测 |
+| ch79 | 地形 LOD | 距离自适应采样 / 分层细节 / 地形光照 |
+| ch80 | GPU 植被 | Compute 散布 / 风场动画 / Indirect Instancing |
+| ch81 | GPU Descriptor Heap | 材质堆 / Descriptor Buffer 能力检测 / SSBO 回退 |
+| ch82 | GPU 生成绘制 | Compute 生成对象与 Indirect Command / DGC 能力检测 |
+| ch83 | ReSTIR | GPU Reservoir / 时间域复用 / 空间域复用 |
 | ch84 | 卡通渲染 | 色阶量化 / 轮廓线 / Sobel 边缘 |
 
-## 第八部分：游戏 Demo 与引擎进阶（ch85–ch90）
+## 第八部分：高级渲染效果（ch85–ch88）
 
 | 章节 | 主题 | 核心概念 |
 |------|------|---------|
@@ -127,17 +127,54 @@
 | ch86 | 次表面散射 | Wrap Lighting / Separable Blur SSS |
 | ch87 | 视差遮蔽贴图 | POM 射线步进 / 高度图自遮挡 |
 | ch88 | 动态天气 | 状态机 / 雨雪粒子 / 湿润度系统 |
-| ch89 | NavMesh 寻路 | A* / 网格编辑 / Recast 烘焙流程 |
-| ch90 | 场景流式加载 | Chunk 网格 / AsyncLoadQueue / LRU 卸载 |
 
-## 第九部分：完整游戏 Demo（ch91–ch94）
+## 第九部分：引擎算法与 GPU 集成（ch89–ch94）
+
+ch89、ch92 是引擎算法实验，不作为 Vulkan 渲染技术示例；其余章节包含独立的
+Compute/Graphics 管线和可见三维输出。
 
 | 章节 | 主题 | 核心概念 |
 |------|------|---------|
-| ch91 | 物理引擎集成 | Bullet/Jolt / 固定步长 / ECS 同步 |
-| ch92 | 网络同步 | 客户端预测 / 快照插值 / 回滚重放 |
-| ch93 | 程序化动画 | 状态机 / Blend Tree / Two-Bone IK |
-| ch94 | MiniGame Demo | 整合 ch51–93 全部子系统 |
+| ch89 | NavMesh 算法实验 | CPU A* / 网格编辑；非 Vulkan 章节 |
+| ch90 | GPU 场景驻留 | Compute Chunk 表 / 驻留半径 / 地形可见性 |
+| ch91 | 物理/渲染器集成 | 固定步长 Compute / SSBO 刚体 / Instanced Billboard |
+| ch92 | 网络同步算法实验 | 预测 / 快照插值；非 Vulkan 章节 |
+| ch93 | GPU 程序化动画 | Compute 骨架 / Two-Bone IK / Instanced 骨段 |
+| ch94 | GPU MiniGame Demo | Compute 实体 / 地形 / 光照 / 天气合成 |
+
+## 第十部分：Vulkan 工程化与独立 GPU 示例（ch95–ch108）
+
+| 章节 | 主题 | 核心概念 |
+|------|------|---------|
+| ch95 | Synchronization 2 | Stage/Access / Layout / Queue Ownership |
+| ch96 | Push Constants | 每帧 GPU 参数 / 动态旋转与着色 |
+| ch97 | Multi Draw | 每次 Draw 独立 Push Constants / 35 次绘制 |
+| ch98 | Specialization Constants | Pipeline 创建期常量 / Shader 编译特化 |
+| ch99 | 刀光攻击特效 | 全屏 GPU Shader / 刀光弧 / 残影 / 冲击火花 |
+| ch100 | GPU 粒子池 | Alive/Dead List / GPU 发射 / Indirect Draw |
+| ch101 | GPU 程序化高度图 | Compute FBM/Ridged Noise / Domain Warp / 3D Height Field |
+| ch102 | GPU 地形侵蚀 | Hydraulic/Thermal Erosion / Ping-Pong Storage Image |
+| ch103 | GPU Clipmap 地形 | Instanced Rings / Heightmap Sampling / Depth Buffer |
+| ch104 | GPU 程序化生物群系 | Temperature/Moisture/Slope / Biome Blending |
+| ch105 | GPU 程序化植被 | Compute Scatter / Compact SSBO / Indirect Draw / Wind |
+| ch106 | GPU Marching Cubes | 3D Density / Marching Tetrahedra / Indirect Draw |
+| ch107 | SDF 洞穴与破坏 | 3D Ray March / CSG / AO / Soft Shadow |
+| ch108 | 程序化河流与道路 | GPU Terrain/Ribbon / River Valley / Animated Flow |
+
+## 第十一部分：生产级 Vulkan 工程基础（ch109–ch118）
+
+| 章节 | 主题 | 核心概念 |
+|------|------|---------|
+| ch109 | Sync2 与多队列 | `vkQueueSubmit2` / Release-Acquire / Queue Ownership / Timeline |
+| ch110 | FrameContext | Per-frame Arena / Deletion Queue / Timeline 延迟销毁 |
+| ch111 | 内存与异步上传 | Non-coherent Flush/Invalidate / Staging Ring / Memory Budget |
+| ch112 | 交换链与帧节奏 | `oldSwapchain` / Present ID-Wait 能力 / 低延迟 / HDR Surface |
+| ch113 | Vulkan 1.4 能力 Profile | Features2 链 / 扩展依赖 / MoltenVK-Desktop-Android 降级 |
+| ch114 | 调试与崩溃诊断 | Object Name / GPU Marker / Validation / Device Fault |
+| ch115 | Headless 与自动测试 | Offscreen Compute / Async Readback / PPM 回归 / CTest |
+| ch116 | Render Graph 2.0 | DAG / Pass Culling / 资源生命周期别名 |
+| ch117 | Shader/Pipeline 工具链 | SPIR-V 反射 / 热重载 / Pipeline Cache |
+| ch118 | GPU Profiling 2.0 | Timestamp Query / Calibrated 能力 / 帧统计 |
 
 ---
 

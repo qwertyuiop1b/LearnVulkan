@@ -8,4 +8,5 @@
 *.obj
 
 build/
+imgui.ini
 

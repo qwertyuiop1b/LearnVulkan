@@ -1,0 +1,29 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(std430, set = 0, binding = 0) writeonly buffer PageTable { uint entries[]; } pageTable;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+uint hashPage(uvec2 page) {
+    uint value = page.x * 1664525u + page.y * 1013904223u;
+    value ^= value >> 16u;
+    value *= 2246822519u;
+    return value ^ (value >> 13u);
+}
+
+void main() {
+    const uvec2 tableSize = uvec2(64u);
+    uvec2 page = gl_GlobalInvocationID.xy;
+    if (any(greaterThanEqual(page, tableSize)))
+        return;
+    vec2 uv = (vec2(page) + 0.5) / vec2(tableSize);
+    vec2 focus = pc.p[1].xy;
+    float distanceToFocus = length(uv - focus);
+    float budget = pc.p[1].z;
+    uint mip = uint(clamp(floor(log2(max(distanceToFocus * 96.0, 1.0))), 0.0, 5.0));
+    float priority = exp(-distanceToFocus * 8.0) + float(hashPage(page) & 255u) / 255.0 * 0.18;
+    bool resident = priority > 1.0 - budget;
+    uint physicalPage = hashPage(page) & 1023u;
+    pageTable.entries[page.x + page.y * tableSize.x] =
+        (resident ? 1u : 0u) | (mip << 1u) | (physicalPage << 4u);
+}

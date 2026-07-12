@@ -1,0 +1,30 @@
+#version 450
+
+layout(local_size_x = 1) in;
+
+layout(std430, set = 0, binding = 1) readonly buffer CounterBuffer {
+    uint triangleCount;
+    uint overflowCount;
+    uint activeCellCount;
+    uint padding;
+} counters;
+
+layout(std430, set = 0, binding = 2) writeonly buffer IndirectBuffer {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} drawCommand;
+
+layout(push_constant) uniform GenerationParams {
+    vec4 volume;
+    vec4 shape;
+    uvec4 grid;
+} pc;
+
+void main() {
+    drawCommand.vertexCount = min(counters.triangleCount, pc.grid.y) * 3u;
+    drawCommand.instanceCount = 1u;
+    drawCommand.firstVertex = 0u;
+    drawCommand.firstInstance = 0u;
+}

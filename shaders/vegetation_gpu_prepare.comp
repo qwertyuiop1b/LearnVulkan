@@ -1,0 +1,18 @@
+#version 450
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, set = 0, binding = 1) buffer IndirectCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} command;
+
+void main() {
+    // Two crossed, three-segment ribbons: 2 * 3 * 6 vertices.
+    command.vertexCount = 36u;
+    command.instanceCount = 0u;
+    command.firstVertex = 0u;
+    command.firstInstance = 0u;
+}

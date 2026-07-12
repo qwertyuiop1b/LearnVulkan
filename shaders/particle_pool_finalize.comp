@@ -1,0 +1,24 @@
+#version 450
+
+layout(local_size_x = 1) in;
+
+layout(std430, set = 0, binding = 4) readonly buffer Counters {
+    uint aliveCount;
+    uint deadCount;
+    uint spawnCursor;
+    uint padding;
+} counters;
+
+layout(std430, set = 0, binding = 5) writeonly buffer IndirectCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} command;
+
+void main() {
+    command.vertexCount = counters.aliveCount * 6u;
+    command.instanceCount = 1u;
+    command.firstVertex = 0u;
+    command.firstInstance = 0u;
+}

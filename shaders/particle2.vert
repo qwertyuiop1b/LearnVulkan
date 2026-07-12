@@ -11,11 +11,11 @@ struct Particle {
     float pad[3];
 };
 
-layout(set = 0, binding = 0) readonly buffer ParticleSSBO {
+layout(std430, set = 0, binding = 0) readonly buffer ParticleSSBO {
     Particle particles[];
 };
 
-layout(set = 0, binding = 1) uniform CameraUBO {
+layout(std140, set = 0, binding = 1) uniform CameraUBO {
     mat4 view;
     mat4 proj;
     vec3 cameraRight;

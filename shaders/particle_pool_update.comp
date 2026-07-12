@@ -1,0 +1,115 @@
+#version 450
+
+layout(local_size_x = 256) in;
+
+struct Particle {
+    vec4 position;
+    vec4 velocity;
+    vec4 color;
+    float size;
+    float pad[3];
+};
+
+struct Emitter {
+    vec4 position;
+    vec4 direction;
+    vec4 colorMin;
+    vec4 colorMax;
+    float speed;
+    float speedVariance;
+    float lifetime;
+    float lifetimeVariance;
+    float size;
+    float emitRate;
+    vec2 pad;
+};
+
+layout(std430, set = 0, binding = 0) buffer ParticleBuffer { Particle particles[]; };
+layout(std140, set = 0, binding = 1) uniform EmitterBlock {
+    Emitter emitters[4];
+    int emitterCount;
+    float deltaTime;
+    float time;
+    uint randomSeed;
+} ubo;
+layout(std430, set = 0, binding = 2) writeonly buffer AliveIndices { uint aliveIndices[]; };
+layout(std430, set = 0, binding = 3) writeonly buffer DeadIndices { uint deadIndices[]; };
+layout(std430, set = 0, binding = 4) buffer Counters {
+    uint aliveCount;
+    uint deadCount;
+    uint spawnCursor;
+    uint padding;
+} counters;
+
+uint pcg(uint value) {
+    uint state = value * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+float randomFloat(inout uint seed) {
+    seed = pcg(seed);
+    return float(seed) / 4294967295.0;
+}
+
+vec3 randomInCone(vec3 direction, float spread, inout uint seed) {
+    float phi = randomFloat(seed) * 6.2831853;
+    float cosTheta = mix(cos(spread), 1.0, randomFloat(seed));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+    vec3 helper = abs(direction.y) < 0.99 ? vec3(0, 1, 0) : vec3(1, 0, 0);
+    vec3 right = normalize(cross(helper, direction));
+    vec3 up = cross(direction, right);
+    return normalize(direction * cosTheta + right * cos(phi) * sinTheta + up * sin(phi) * sinTheta);
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= particles.length())
+        return;
+
+    Particle particle = particles[index];
+    uint seed = pcg(ubo.randomSeed ^ (index * 1973u + 9277u));
+
+    if (particle.position.w <= 0.0) {
+        float totalRate = 0.0;
+        for (int i = 0; i < ubo.emitterCount; ++i)
+            totalRate += max(ubo.emitters[i].emitRate, 0.0);
+        uint spawnBudget = uint(totalRate * ubo.deltaTime);
+        uint ticket = atomicAdd(counters.spawnCursor, 1u);
+        if (ticket < spawnBudget && ubo.emitterCount > 0) {
+            float selector = randomFloat(seed) * totalRate;
+            int emitterIndex = 0;
+            float accumulated = max(ubo.emitters[0].emitRate, 0.0);
+            while (emitterIndex + 1 < ubo.emitterCount && selector > accumulated) {
+                ++emitterIndex;
+                accumulated += max(ubo.emitters[emitterIndex].emitRate, 0.0);
+            }
+            Emitter emitter = ubo.emitters[emitterIndex];
+            vec3 direction = randomInCone(normalize(emitter.direction.xyz), emitter.direction.w, seed);
+            float speed = emitter.speed + (randomFloat(seed) * 2.0 - 1.0) * emitter.speedVariance;
+            float lifetime = max(0.05, emitter.lifetime +
+                (randomFloat(seed) * 2.0 - 1.0) * emitter.lifetimeVariance);
+            particle.position = vec4(emitter.position.xyz, lifetime);
+            particle.velocity = vec4(direction * speed, lifetime);
+            particle.color = mix(emitter.colorMin, emitter.colorMax, randomFloat(seed));
+            particle.size = emitter.size * mix(0.55, 1.0, randomFloat(seed));
+        }
+    } else {
+        particle.velocity.xyz += vec3(0.0, -2.1, 0.0) * ubo.deltaTime;
+        particle.position.xyz += particle.velocity.xyz * ubo.deltaTime;
+        particle.position.w -= ubo.deltaTime;
+        float lifeRatio = clamp(particle.position.w / max(particle.velocity.w, 0.001), 0.0, 1.0);
+        particle.color.a = lifeRatio;
+        particle.size *= mix(0.985, 1.0, lifeRatio);
+    }
+
+    if (particle.position.w > 0.0) {
+        uint destination = atomicAdd(counters.aliveCount, 1u);
+        aliveIndices[destination] = index;
+    } else {
+        particle.position.w = -1.0;
+        uint destination = atomicAdd(counters.deadCount, 1u);
+        deadIndices[destination] = index;
+    }
+    particles[index] = particle;
+}

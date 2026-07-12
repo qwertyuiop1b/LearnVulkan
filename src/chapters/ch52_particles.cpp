@@ -52,9 +52,18 @@ constexpr int MAX_FRAMES = 2;
 constexpr uint32_t N_PARTICLES = 16384; // 必须是 local_size_x(256) 的倍数
 constexpr int N_EMITTERS = 3;
 
+#ifdef CH100_GPU_PARTICLE_POOL
+struct alignas(16) ParticleCounters {
+    uint32_t aliveCount;
+    uint32_t deadCount;
+    uint32_t spawnCursor;
+    uint32_t padding;
+};
+#endif
+
 // ─── 数据结构（与着色器 GLSL 对齐）────────────────────────────────────────
 
-struct GpuParticle {
+struct alignas(16) GpuParticle {
     glm::vec4 position; // xyz=pos, w=lifetime(当前)
     glm::vec4 velocity; // xyz=vel, w=maxLifetime
     glm::vec4 color;    // rgba
@@ -62,7 +71,7 @@ struct GpuParticle {
     float pad[3];
 };
 
-struct GpuEmitter {
+struct alignas(16) GpuEmitter {
     glm::vec4 position;  // xyz=pos, w=emitType(0=点,1=锥)
     glm::vec4 direction; // xyz=朝向, w=spread(弧度)
     glm::vec4 colorMin;
@@ -76,7 +85,7 @@ struct GpuEmitter {
     float pad[2];
 };
 
-struct EmitterUBO {
+struct alignas(16) EmitterUBO {
     GpuEmitter emitters[4];
     int emitterCount;
     float deltaTime;
@@ -84,7 +93,12 @@ struct EmitterUBO {
     uint32_t randomSeed;
 };
 
-struct CameraUBO {
+static_assert(sizeof(GpuParticle) == 64, "GpuParticle must match the std430 Particle shader struct");
+static_assert(sizeof(GpuEmitter) == 96, "GpuEmitter must match the std140 Emitter shader struct");
+static_assert(offsetof(EmitterUBO, emitterCount) == 384, "EmitterUBO emitter array layout mismatch");
+static_assert(sizeof(EmitterUBO) == 400, "EmitterUBO must match the shader uniform block");
+
+struct alignas(16) CameraUBO {
     glm::mat4 view;
     glm::mat4 proj;
     glm::vec3 cameraRight;
@@ -92,6 +106,8 @@ struct CameraUBO {
     glm::vec3 cameraUp;
     float pad1;
 };
+
+static_assert(sizeof(CameraUBO) == 160, "CameraUBO must match the shader uniform block");
 
 class Ch52App {
   public:
@@ -123,6 +139,9 @@ class Ch52App {
     // 管线
     VkRenderPass renderPass_ = VK_NULL_HANDLE;
     VkPipeline computePipeline_ = VK_NULL_HANDLE;
+#ifdef CH100_GPU_PARTICLE_POOL
+    VkPipeline finalizePipeline_ = VK_NULL_HANDLE;
+#endif
     VkPipelineLayout computeLayout_ = VK_NULL_HANDLE;
     VkDescriptorSetLayout computeDSL_ = VK_NULL_HANDLE;
     VkPipeline drawPipeline_ = VK_NULL_HANDLE;
@@ -136,6 +155,17 @@ class Ch52App {
     // 粒子 SSBO（每帧一份，避免 in-flight 竞争）
     std::vector<VkBuffer> particleBuffers_;
     std::vector<VkDeviceMemory> particleMem_;
+
+#ifdef CH100_GPU_PARTICLE_POOL
+    std::vector<VkBuffer> aliveIndexBuffers_;
+    std::vector<VkDeviceMemory> aliveIndexMem_;
+    std::vector<VkBuffer> deadIndexBuffers_;
+    std::vector<VkDeviceMemory> deadIndexMem_;
+    std::vector<VkBuffer> counterBuffers_;
+    std::vector<VkDeviceMemory> counterMem_;
+    std::vector<VkBuffer> indirectBuffers_;
+    std::vector<VkDeviceMemory> indirectMem_;
+#endif
 
     // UBO
     std::vector<VkBuffer> emitterUBOs_;
@@ -164,7 +194,12 @@ class Ch52App {
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        window_ = glfwCreateWindow(WIDTH, HEIGHT, "第52章：GPU 粒子系统", nullptr, nullptr);
+#ifdef CH100_GPU_PARTICLE_POOL
+        const char* title = "第100章：GPU Particle Pool + Indirect Draw";
+#else
+        const char* title = "第52章：GPU 粒子系统";
+#endif
+        window_ = glfwCreateWindow(WIDTH, HEIGHT, title, nullptr, nullptr);
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* w, int, int) {
             reinterpret_cast<Ch52App*>(glfwGetWindowUserPointer(w))->resized_ = true;
@@ -184,6 +219,7 @@ class Ch52App {
         emitters_[0].lifetime = 1.0f;
         emitters_[0].lifetimeVariance = 0.3f;
         emitters_[0].size = 0.18f;
+        emitters_[0].emitRate = 1400.0f;
 
         // 1: 魔法球（蓝紫，球形散射）
         emitters_[1].position = glm::vec4(-2, 1, 0, 1);
@@ -195,6 +231,7 @@ class Ch52App {
         emitters_[1].lifetime = 1.2f;
         emitters_[1].lifetimeVariance = 0.5f;
         emitters_[1].size = 0.12f;
+        emitters_[1].emitRate = 900.0f;
 
         // 2: 烟（灰白，慢速向上漂移）
         emitters_[2].position = glm::vec4(0, 0.3f, 0, 1);
@@ -206,6 +243,7 @@ class Ch52App {
         emitters_[2].lifetime = 2.5f;
         emitters_[2].lifetimeVariance = 0.5f;
         emitters_[2].size = 0.3f;
+        emitters_[2].emitRate = 420.0f;
     }
 
     void initVulkan() {
@@ -220,6 +258,9 @@ class Ch52App {
         createRenderPass();
         createFramebuffers();
         createParticleBuffers();
+#ifdef CH100_GPU_PARTICLE_POOL
+        createParticlePoolBuffers();
+#endif
         createUniformBuffers();
         createDescriptorLayouts();
         createDescriptorPool();
@@ -386,6 +427,36 @@ class Ch52App {
         vkFreeMemory(device_, stagingMem, nullptr);
     }
 
+#ifdef CH100_GPU_PARTICLE_POOL
+    void createParticlePoolBuffers() {
+        aliveIndexBuffers_.resize(MAX_FRAMES);
+        aliveIndexMem_.resize(MAX_FRAMES);
+        deadIndexBuffers_.resize(MAX_FRAMES);
+        deadIndexMem_.resize(MAX_FRAMES);
+        counterBuffers_.resize(MAX_FRAMES);
+        counterMem_.resize(MAX_FRAMES);
+        indirectBuffers_.resize(MAX_FRAMES);
+        indirectMem_.resize(MAX_FRAMES);
+
+        const VkDeviceSize indexBytes = sizeof(uint32_t) * N_PARTICLES;
+        for (int i = 0; i < MAX_FRAMES; ++i) {
+            createBuffer(physDev_, device_, indexBytes,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, aliveIndexBuffers_[i], aliveIndexMem_[i]);
+            createBuffer(physDev_, device_, indexBytes,
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, deadIndexBuffers_[i], deadIndexMem_[i]);
+            createBuffer(physDev_, device_, sizeof(ParticleCounters),
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, counterBuffers_[i], counterMem_[i]);
+            createBuffer(physDev_, device_, sizeof(VkDrawIndirectCommand),
+                         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+                             VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indirectBuffers_[i], indirectMem_[i]);
+        }
+    }
+#endif
+
     void createUniformBuffers() {
         emitterUBOs_.resize(MAX_FRAMES);
         emitterUBOMem_.resize(MAX_FRAMES);
@@ -415,27 +486,51 @@ class Ch52App {
 
     void createDescriptorLayouts() {
         // Compute DSL：SSBO + EmitterUBO
+#ifdef CH100_GPU_PARTICLE_POOL
+        std::array<VkDescriptorSetLayoutBinding, 6> compBs = {{
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+            {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+            {3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+            {4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+            {5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
+        }};
+#else
         std::array<VkDescriptorSetLayoutBinding, 2> compBs = {{
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
             {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT},
         }};
+#endif
         VkDescriptorSetLayoutCreateInfo dci{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-        dci.bindingCount = 2;
+        dci.bindingCount = static_cast<uint32_t>(compBs.size());
         dci.pBindings = compBs.data();
         VK_CHECK(vkCreateDescriptorSetLayout(device_, &dci, nullptr, &computeDSL_));
 
         // Draw DSL：SSBO + CameraUBO
+#ifdef CH100_GPU_PARTICLE_POOL
+        std::array<VkDescriptorSetLayoutBinding, 3> drawBs = {{
+            {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT},
+            {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT},
+            {2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT},
+        }};
+#else
         std::array<VkDescriptorSetLayoutBinding, 2> drawBs = {{
             {0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT},
             {1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT},
         }};
+#endif
+        dci.bindingCount = static_cast<uint32_t>(drawBs.size());
         dci.pBindings = drawBs.data();
         VK_CHECK(vkCreateDescriptorSetLayout(device_, &dci, nullptr, &drawDSL_));
     }
 
     void createDescriptorPool() {
         std::array<VkDescriptorPoolSize, 2> sizes = {{
+#ifdef CH100_GPU_PARTICLE_POOL
+            {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES * 8},
+#else
             {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, MAX_FRAMES * 2},
+#endif
             {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, MAX_FRAMES * 2},
         }};
         VkDescriptorPoolCreateInfo ci{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
@@ -463,6 +558,25 @@ class Ch52App {
             VkDescriptorBufferInfo emitInfo{emitterUBOs_[i], 0, sizeof(EmitterUBO)};
             VkDescriptorBufferInfo camInfo{cameraUBOs_[i], 0, sizeof(CameraUBO)};
 
+#ifdef CH100_GPU_PARTICLE_POOL
+            VkDescriptorBufferInfo aliveInfo{aliveIndexBuffers_[i], 0, VK_WHOLE_SIZE};
+            VkDescriptorBufferInfo deadInfo{deadIndexBuffers_[i], 0, VK_WHOLE_SIZE};
+            VkDescriptorBufferInfo counterInfo{counterBuffers_[i], 0, sizeof(ParticleCounters)};
+            VkDescriptorBufferInfo indirectInfo{indirectBuffers_[i], 0, sizeof(VkDrawIndirectCommand)};
+            std::array<VkWriteDescriptorSet, 6> compW{};
+            VkDescriptorBufferInfo* compInfos[] = {&ssboInfo, &emitInfo, &aliveInfo, &deadInfo, &counterInfo, &indirectInfo};
+            VkDescriptorType compTypes[] = {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                            VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+            for (uint32_t binding = 0; binding < compW.size(); ++binding) {
+                compW[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                compW[binding].dstSet = computeSets_[i];
+                compW[binding].dstBinding = binding;
+                compW[binding].descriptorCount = 1;
+                compW[binding].descriptorType = compTypes[binding];
+                compW[binding].pBufferInfo = compInfos[binding];
+            }
+#else
             std::array<VkWriteDescriptorSet, 2> compW = {{
                 {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                  nullptr,
@@ -483,8 +597,20 @@ class Ch52App {
                  nullptr,
                  &emitInfo},
             }};
-            vkUpdateDescriptorSets(device_, 2, compW.data(), 0, nullptr);
-
+#endif
+#ifdef CH100_GPU_PARTICLE_POOL
+            std::array<VkWriteDescriptorSet, 3> drawW{};
+            VkDescriptorBufferInfo* drawInfos[] = {&ssboInfo, &camInfo, &aliveInfo};
+            for (uint32_t binding = 0; binding < drawW.size(); ++binding) {
+                drawW[binding].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                drawW[binding].dstSet = drawSets_[i];
+                drawW[binding].dstBinding = binding;
+                drawW[binding].descriptorCount = 1;
+                drawW[binding].descriptorType = binding == 1 ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER
+                                                              : VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+                drawW[binding].pBufferInfo = drawInfos[binding];
+            }
+#else
             std::array<VkWriteDescriptorSet, 2> drawW = {{
                 {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                  nullptr,
@@ -505,7 +631,9 @@ class Ch52App {
                  nullptr,
                  &camInfo},
             }};
-            vkUpdateDescriptorSets(device_, 2, drawW.data(), 0, nullptr);
+#endif
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(compW.size()), compW.data(), 0, nullptr);
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(drawW.size()), drawW.data(), 0, nullptr);
         }
     }
 
@@ -517,7 +645,11 @@ class Ch52App {
             lci.pSetLayouts = &computeDSL_;
             VK_CHECK(vkCreatePipelineLayout(device_, &lci, nullptr, &computeLayout_));
 
+#ifdef CH100_GPU_PARTICLE_POOL
+            auto comp = createShaderModuleFromFile(device_, "particle_pool_update.comp.spv");
+#else
             auto comp = createShaderModuleFromFile(device_, "particle2_update.comp.spv");
+#endif
             VkPipelineShaderStageCreateInfo stage{VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                                                   nullptr,
                                                   0,
@@ -529,6 +661,12 @@ class Ch52App {
             ci.layout = computeLayout_;
             VK_CHECK(vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &ci, nullptr, &computePipeline_));
             vkDestroyShaderModule(device_, comp, nullptr);
+#ifdef CH100_GPU_PARTICLE_POOL
+            auto finalize = createShaderModuleFromFile(device_, "particle_pool_finalize.comp.spv");
+            ci.stage.module = finalize;
+            VK_CHECK(vkCreateComputePipelines(device_, VK_NULL_HANDLE, 1, &ci, nullptr, &finalizePipeline_));
+            vkDestroyShaderModule(device_, finalize, nullptr);
+#endif
         }
 
         // ── Draw pipeline（Billboard 粒子）──
@@ -538,7 +676,11 @@ class Ch52App {
             lci.pSetLayouts = &drawDSL_;
             VK_CHECK(vkCreatePipelineLayout(device_, &lci, nullptr, &drawLayout_));
 
+#ifdef CH100_GPU_PARTICLE_POOL
+            auto vert = createShaderModuleFromFile(device_, "particle_pool.vert.spv");
+#else
             auto vert = createShaderModuleFromFile(device_, "particle2.vert.spv");
+#endif
             auto frag = createShaderModuleFromFile(device_, "particle2.frag.spv");
 
             VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
@@ -672,6 +814,9 @@ class Ch52App {
                 ImGui::SliderFloat("速度", &e.speed, 0.1f, 5.0f);
                 ImGui::SliderFloat("寿命", &e.lifetime, 0.2f, 5.0f);
                 ImGui::SliderFloat("大小", &e.size, 0.02f, 0.5f);
+#ifdef CH100_GPU_PARTICLE_POOL
+                ImGui::SliderFloat("发射率", &e.emitRate, 0.0f, 4000.0f, "%.0f particles/s");
+#endif
                 float spread = e.direction.w;
                 if (ImGui::SliderFloat("扩散角(rad)", &spread, 0.01f, 3.14159f))
                     e.direction.w = spread;
@@ -705,11 +850,58 @@ class Ch52App {
         interactive_.beginGpuSection(cmd, currentFrame_);
 
         // ── Compute Pass ──
+#ifdef CH100_GPU_PARTICLE_POOL
+        vkCmdFillBuffer(cmd, counterBuffers_[currentFrame_], 0, sizeof(ParticleCounters), 0);
+        vkCmdFillBuffer(cmd, indirectBuffers_[currentFrame_], 0, sizeof(VkDrawIndirectCommand), 0);
+        std::array<VkBufferMemoryBarrier, 2> resetBarriers{};
+        VkBuffer resetBuffers[] = {counterBuffers_[currentFrame_], indirectBuffers_[currentFrame_]};
+        for (size_t i = 0; i < resetBarriers.size(); ++i) {
+            resetBarriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            resetBarriers[i].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            resetBarriers[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+            resetBarriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resetBarriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            resetBarriers[i].buffer = resetBuffers[i];
+            resetBarriers[i].size = VK_WHOLE_SIZE;
+        }
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                             static_cast<uint32_t>(resetBarriers.size()), resetBarriers.data(), 0, nullptr);
+#endif
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline_);
         vkCmdBindDescriptorSets(
             cmd, VK_PIPELINE_BIND_POINT_COMPUTE, computeLayout_, 0, 1, &computeSets_[currentFrame_], 0, nullptr);
         vkCmdDispatch(cmd, N_PARTICLES / 256, 1, 1);
 
+#ifdef CH100_GPU_PARTICLE_POOL
+        VkBufferMemoryBarrier counterBarrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+        counterBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+        counterBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        counterBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        counterBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        counterBarrier.buffer = counterBuffers_[currentFrame_];
+        counterBarrier.size = VK_WHOLE_SIZE;
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+                             nullptr, 1, &counterBarrier, 0, nullptr);
+
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, finalizePipeline_);
+        vkCmdDispatch(cmd, 1, 1, 1);
+
+        std::array<VkBufferMemoryBarrier, 3> drawBarriers{};
+        VkBuffer drawBuffers[] = {particleBuffers_[currentFrame_], aliveIndexBuffers_[currentFrame_],
+                                  indirectBuffers_[currentFrame_]};
+        for (size_t i = 0; i < drawBarriers.size(); ++i) {
+            drawBarriers[i].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+            drawBarriers[i].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            drawBarriers[i].dstAccessMask = i == 2 ? VK_ACCESS_INDIRECT_COMMAND_READ_BIT : VK_ACCESS_SHADER_READ_BIT;
+            drawBarriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            drawBarriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            drawBarriers[i].buffer = drawBuffers[i];
+            drawBarriers[i].size = VK_WHOLE_SIZE;
+        }
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr,
+                             static_cast<uint32_t>(drawBarriers.size()), drawBarriers.data(), 0, nullptr);
+#else
         // SSBO：Compute write → Vertex read 屏障
         VkBufferMemoryBarrier bmb{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
         bmb.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -729,6 +921,7 @@ class Ch52App {
                              &bmb,
                              0,
                              nullptr);
+#endif
 
         // ── Graphics Pass ──
         VkClearValue clears[2]{};
@@ -752,7 +945,11 @@ class Ch52App {
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawPipeline_);
         vkCmdBindDescriptorSets(
             cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawLayout_, 0, 1, &drawSets_[currentFrame_], 0, nullptr);
+#ifdef CH100_GPU_PARTICLE_POOL
+        vkCmdDrawIndirect(cmd, indirectBuffers_[currentFrame_], 0, 1, sizeof(VkDrawIndirectCommand));
+#else
         vkCmdDraw(cmd, N_PARTICLES * 6, 1, 0, 0);
+#endif
 
         interactive_.renderUi(cmd);
         vkCmdEndRenderPass(cmd);
@@ -790,7 +987,11 @@ class Ch52App {
         for (int i = 0; i < N_EMITTERS; ++i)
             eu.emitters[i] = emitters_[i];
         eu.emitterCount = N_EMITTERS;
+#ifdef CH100_GPU_PARTICLE_POOL
+        eu.deltaTime = deltaTime_ * float(MAX_FRAMES); // Each per-frame pool advances when its fence slot returns.
+#else
         eu.deltaTime = deltaTime_;
+#endif
         eu.time = totalTime_;
         eu.randomSeed = static_cast<uint32_t>(totalTime_ * 1000.0f);
         std::memcpy(emitterMapped_[fi], &eu, sizeof(eu));
@@ -835,6 +1036,9 @@ class Ch52App {
         vkDestroyDescriptorSetLayout(device_, computeDSL_, nullptr);
         vkDestroyDescriptorSetLayout(device_, drawDSL_, nullptr);
         vkDestroyPipeline(device_, computePipeline_, nullptr);
+#ifdef CH100_GPU_PARTICLE_POOL
+        vkDestroyPipeline(device_, finalizePipeline_, nullptr);
+#endif
         vkDestroyPipeline(device_, drawPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, computeLayout_, nullptr);
         vkDestroyPipelineLayout(device_, drawLayout_, nullptr);
@@ -842,6 +1046,16 @@ class Ch52App {
         for (int i = 0; i < MAX_FRAMES; ++i) {
             vkDestroyBuffer(device_, particleBuffers_[i], nullptr);
             vkFreeMemory(device_, particleMem_[i], nullptr);
+#ifdef CH100_GPU_PARTICLE_POOL
+            vkDestroyBuffer(device_, aliveIndexBuffers_[i], nullptr);
+            vkFreeMemory(device_, aliveIndexMem_[i], nullptr);
+            vkDestroyBuffer(device_, deadIndexBuffers_[i], nullptr);
+            vkFreeMemory(device_, deadIndexMem_[i], nullptr);
+            vkDestroyBuffer(device_, counterBuffers_[i], nullptr);
+            vkFreeMemory(device_, counterMem_[i], nullptr);
+            vkDestroyBuffer(device_, indirectBuffers_[i], nullptr);
+            vkFreeMemory(device_, indirectMem_[i], nullptr);
+#endif
             vkDestroyBuffer(device_, emitterUBOs_[i], nullptr);
             vkFreeMemory(device_, emitterUBOMem_[i], nullptr);
             vkDestroyBuffer(device_, cameraUBOs_[i], nullptr);
@@ -868,7 +1082,11 @@ class Ch52App {
 
 int main() {
     std::cout << "══════════════════════════════════════════════════\n";
+#ifdef CH100_GPU_PARTICLE_POOL
+    std::cout << " 第100章：GPU Particle Pool + Indirect Draw\n";
+#else
     std::cout << " 第52章：游戏向 GPU 粒子系统\n";
+#endif
     std::cout << "══════════════════════════════════════════════════\n\n";
     std::cout << "粒子数量：" << N_PARTICLES << "\n";
     std::cout << "发射器：篝火 + 魔法球 + 烟\n";

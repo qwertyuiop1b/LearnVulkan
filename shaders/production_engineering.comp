@@ -1,0 +1,17 @@
+#version 450
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0, std430) buffer Samples { vec4 values[]; };
+layout(push_constant) uniform Push { vec4 p[8]; } pc;
+
+float hash11(float x) { return fract(sin(x * 91.731) * 43758.5453); }
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= 256u) return;
+    float x = float(id) / 255.0;
+    float mode = pc.p[0].w;
+    float wave = 0.5 + 0.32 * sin(x * (8.0 + mode) + pc.p[0].z * (0.7 + mode * 0.08));
+    float pulse = exp(-18.0 * abs(x - fract(pc.p[0].z * 0.08 + mode * 0.13)));
+    values[id] = vec4(x, clamp(wave + pulse * 0.22, 0.02, 0.98), hash11(float(id) + mode), pc.p[1].x);
+}

@@ -10,7 +10,7 @@ struct Particle {
     float pad[3];
 };
 
-layout(set = 0, binding = 0) buffer ParticleSSBO {
+layout(std430, set = 0, binding = 0) buffer ParticleSSBO {
     Particle particles[];
 };
 
@@ -26,10 +26,12 @@ struct Emitter {
     float lifetimeVariance;
     float size;
     float emitRate;    // 粒子/秒（本 Compute 不用，仅 CPU 控制）
-    float pad[2];
+    // vec2 keeps the std140 struct stride at 96 bytes, matching GpuEmitter.
+    // float[2] would use a 16-byte array stride and inflate this struct to 128 bytes.
+    vec2  pad;
 };
 
-layout(set = 0, binding = 1) uniform EmitterUBO {
+layout(std140, set = 0, binding = 1) uniform EmitterUBO {
     Emitter emitters[4];
     int     emitterCount;
     float   deltaTime;

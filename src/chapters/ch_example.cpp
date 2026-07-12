@@ -10,10 +10,8 @@
 #include <exception>
 #include <fmt/base.h>
 #include <fstream>
-#include <ios>
 #include <limits>
 #include <optional>
-#include <regex>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -22,6 +20,8 @@
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADINS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
@@ -134,7 +134,7 @@ struct SwapchainSupportedDetails {
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 struct Vertex {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
 
@@ -151,7 +151,7 @@ struct Vertex {
         std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{VkVertexInputAttributeDescription{
                                                                                    .binding = 0,
                                                                                    .location = 0,
-                                                                                   .format = VK_FORMAT_R32G32_SFLOAT,
+                                                                                   .format = VK_FORMAT_R32G32B32_SFLOAT,
                                                                                    .offset = offsetof(Vertex, pos),
                                                                                },
                                                                                VkVertexInputAttributeDescription{
@@ -159,15 +159,13 @@ struct Vertex {
                                                                                    .location = 1,
                                                                                    .format = VK_FORMAT_R32G32B32_SFLOAT,
                                                                                    .offset = offsetof(Vertex, color),
-                                                                               }, 
-                                                                            {
-                                                                                VkVertexInputAttributeDescription {
-                                                                                    .binding = 0,
-                                                                                    .location = 2,
-                                                                                    .format = VK_FORMAT_R32G32_SFLOAT,
-                                                                                    .offset = offsetof(Vertex, texCoord),
-                                                                                }
-                                                                            }};
+                                                                               },
+                                                                               {VkVertexInputAttributeDescription{
+                                                                                   .binding = 0,
+                                                                                   .location = 2,
+                                                                                   .format = VK_FORMAT_R32G32_SFLOAT,
+                                                                                   .offset = offsetof(Vertex, texCoord),
+                                                                               }}};
 
         return attributeDescriptions;
     }
@@ -180,20 +178,18 @@ struct UniformBufferObject {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.f}},
-    {{0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.f, 0.f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}, {0.f, 1.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.f}},
+    {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.f, 0.f}},
+    {{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.f, 1.0f}},
+    {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
 };
 
-const std::vector<uint16_t> indices = {
-    0,
-    1,
-    2,
-    2,
-    3,
-    0,
-};
+const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 class Example {
   public:
@@ -288,12 +284,18 @@ class Example {
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
+
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
+
     VkImage textureImage;
     VkDeviceMemory textureImageMemory;
     VkImageView textureImageView;
     VkSampler textureSampler;
+
+    VkImage depthImage;
+    VkDeviceMemory depthImageMemory;
+    VkImageView depthImageView;
 
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkBuffer> uniformBuffers;
@@ -1024,6 +1026,28 @@ class Example {
         endSingleTimeCommands(commandBuffer);
     }
 
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+        for (VkFormat format : candidates) {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+
+            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+                return format;
+            } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+                return format;
+            }
+        }
+        throw std::runtime_error("Failed to find supported format!");
+    }
+
+    VkFormat findDepthFormat() {
+        return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    }
+
+    void createDepthResource() {
+
+    }
+
     void createTextureImage() {
         int texWidth, texHeight, texChannels;
         auto pixels = stbi_load("assets/textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1412,6 +1436,7 @@ class Example {
         createGraphicPipeline();
         createFramebuffers();
         createCommandPool();
+        createDepthResource();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();

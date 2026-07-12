@@ -11,6 +11,8 @@ endif()
 
 project(VulkanTutorial VERSION 1.0.0 LANGUAGES CXX)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -100,7 +102,7 @@ function(compile_shaders TARGET)
     set(SPIRV_DIR  "${CMAKE_BINARY_DIR}/shaders")
     file(MAKE_DIRECTORY ${SPIRV_DIR})
 
-    file(GLOB SHADER_SOURCES
+    file(GLOB SHADER_SOURCES CONFIGURE_DEPENDS
         "${SHADER_DIR}/*.vert"
         "${SHADER_DIR}/*.frag"
         "${SHADER_DIR}/*.comp"
@@ -112,7 +114,7 @@ function(compile_shaders TARGET)
         "${SHADER_DIR}/*.rchit")
 
     if(SHADER_COMPILER_SUPPORTS_MESH_SHADERS)
-        file(GLOB MESH_SHADER_SOURCES
+        file(GLOB MESH_SHADER_SOURCES CONFIGURE_DEPENDS
             "${SHADER_DIR}/*.mesh"
             "${SHADER_DIR}/*.task")
         list(APPEND SHADER_SOURCES ${MESH_SHADER_SOURCES})

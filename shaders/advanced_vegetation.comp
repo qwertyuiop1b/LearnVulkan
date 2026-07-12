@@ -1,0 +1,50 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+struct InstanceData { vec4 positionHeight; vec4 attributes; };
+layout(std430, set = 0, binding = 0) writeonly buffer Instances { InstanceData data[]; } instances;
+layout(std430, set = 0, binding = 1) buffer IndirectCommand {
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} command;
+layout(push_constant) uniform AdvancedPush { vec4 p[8]; } pc;
+
+uint hashUint(uint value) {
+    value ^= value >> 16u;
+    value *= 0x7feb352du;
+    value ^= value >> 15u;
+    value *= 0x846ca68bu;
+    return value ^ (value >> 16u);
+}
+
+float random01(uint value) { return float(hashUint(value)) / 4294967295.0; }
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    uint maxInstances = uint(pc.p[5].z + 0.5);
+    if (index >= maxInstances)
+        return;
+    if (index == 0u) {
+        command.vertexCount = 12u;
+        command.instanceCount = maxInstances;
+        command.firstVertex = 0u;
+        command.firstInstance = 0u;
+    }
+    uint width = uint(sqrt(float(maxInstances)) + 0.5);
+    uvec2 cell = uvec2(index % width, index / width);
+    vec2 jitter = vec2(random01(index * 2u + 1u), random01(index * 2u + 2u)) - 0.5;
+    vec2 normalized = (vec2(cell) + 0.5 + jitter * 0.82) / float(width) - 0.5;
+    float fieldSize = pc.p[5].x;
+    vec2 xz = normalized * fieldSize;
+    float density = pc.p[5].y;
+    bool isActive = random01(index + 71u) < density && length(normalized) < 0.69;
+    float terrain = sin(xz.x * 0.13) * cos(xz.y * 0.11) * 0.48;
+    float height = mix(0.62, 1.72, random01(index + 191u));
+    instances.data[index].positionHeight = vec4(xz.x, terrain, xz.y, isActive ? height : 0.0);
+    instances.data[index].attributes = vec4(mix(0.035, 0.085, random01(index + 271u)),
+                                             random01(index + 337u) * 6.2831853,
+                                             random01(index + 419u),
+                                             random01(index + 503u) * 6.2831853);
+}

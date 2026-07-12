@@ -1,0 +1,74 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D heightMap;
+
+layout(push_constant) uniform HeightParams {
+    float time;
+    float seed;
+    float frequency;
+    float amplitude;
+    int octaves;
+    float ridgeWeight;
+    float warpStrength;
+    float padding;
+} pc;
+
+uint hash(uint x) {
+    x ^= x >> 16;
+    x *= 0x7feb352du;
+    x ^= x >> 15;
+    x *= 0x846ca68bu;
+    return x ^ (x >> 16);
+}
+
+float randomValue(ivec2 p) {
+    uint h = hash(uint(p.x) ^ hash(uint(p.y) + floatBitsToUint(pc.seed)));
+    return float(h) / 4294967295.0;
+}
+
+float valueNoise(vec2 p) {
+    ivec2 cell = ivec2(floor(p));
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = randomValue(cell);
+    float b = randomValue(cell + ivec2(1, 0));
+    float c = randomValue(cell + ivec2(0, 1));
+    float d = randomValue(cell + ivec2(1, 1));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y) * 2.0 - 1.0;
+}
+
+float fbm(vec2 p) {
+    float sum = 0.0;
+    float weight = 0.5;
+    mat2 rotation = mat2(0.80, -0.60, 0.60, 0.80);
+    for (int i = 0; i < 10; ++i) {
+        if (i >= pc.octaves)
+            break;
+        float n = valueNoise(p);
+        float ridged = 1.0 - abs(n);
+        sum += mix(n, ridged * ridged, pc.ridgeWeight) * weight;
+        p = rotation * p * 2.03 + vec2(13.1, 7.7);
+        weight *= 0.5;
+    }
+    return sum;
+}
+
+void main() {
+    ivec2 size = imageSize(heightMap);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    vec2 p = (uv - 0.5) * pc.frequency;
+    vec2 warp = vec2(fbm(p * 0.55 + 19.0), fbm(p * 0.55 - 11.0));
+    float continental = fbm(p + warp * pc.warpStrength);
+    float detail = fbm(p * 2.7 + vec2(pc.time * 0.025, 0.0));
+    float height = continental * 0.72 + detail * 0.28;
+    height = clamp(0.48 + height * pc.amplitude, 0.02, 0.98);
+
+    float moisture = clamp(0.5 + fbm(p * 0.73 + 41.0) * 0.65 - height * 0.18, 0.0, 1.0);
+    float rockMask = smoothstep(0.58, 0.88, abs(detail) + height * 0.45);
+    imageStore(heightMap, pixel, vec4(height, moisture, rockMask, 1.0));
+}

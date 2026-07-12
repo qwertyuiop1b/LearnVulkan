@@ -145,7 +145,8 @@ class Ch16App {
     // ═══════════════════════════════════════════════════════════════════════
 
     void createGraphicsPipeline() {
-        VkShaderModule vert = createShaderModuleFromFile(device_, "uniform3d.vert.spv");
+        // 本章不使用描述符；顶点着色器直接把顶点缓冲中的位置作为裁剪空间坐标。
+        VkShaderModule vert = createShaderModuleFromFile(device_, "dynamic_rendering.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "triangle.frag.spv");
 
         VkPipelineShaderStageCreateInfo stages[2]{};
