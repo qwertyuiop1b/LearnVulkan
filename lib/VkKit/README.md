@@ -29,7 +29,20 @@
 | GLFW 3.3+ | 创建 window surface |
 | Vulkan Memory Allocator (VMA) | `Buffer` 和 `Image` 的内存分配 |
 
-VMA 以头文件方式使用。CMake 会在 Vulkan include 路径及其 `vma/` 子目录中查找 `vk_mem_alloc.h`。
+VMA 以头文件方式使用。作为本仓库的子目录构建时，CMake 默认使用
+`external/VulkanMemoryAllocator/include/vk_mem_alloc.h`；请先初始化 submodule：
+
+```bash
+git submodule update --init --recursive
+```
+
+独立使用 VkKit 时，CMake 会在 Vulkan include 路径及其 `vma/` 子目录中查找
+`vk_mem_alloc.h`，也可以显式指定其所在目录：
+
+```bash
+cmake -S lib/VkKit -B build/vkkit \
+  -DVKKIT_VMA_INCLUDE_DIR=/path/to/VulkanMemoryAllocator/include
+```
 
 ### 作为子目录使用
 

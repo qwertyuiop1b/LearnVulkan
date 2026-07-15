@@ -6,7 +6,9 @@ find_package(Vulkan REQUIRED)
 
 find_path(VKKIT_VMA_INCLUDE_DIR
     NAMES vk_mem_alloc.h
-    HINTS ${Vulkan_INCLUDE_DIRS}
+    HINTS
+        "${CMAKE_SOURCE_DIR}/external/VulkanMemoryAllocator/include"
+        ${Vulkan_INCLUDE_DIRS}
     PATH_SUFFIXES vma)
 if(NOT VKKIT_VMA_INCLUDE_DIR)
     message(FATAL_ERROR "VkKit requires vk_mem_alloc.h from Vulkan Memory Allocator (VMA)")

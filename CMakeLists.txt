@@ -26,7 +26,8 @@ find_package(Vulkan REQUIRED)
 # ─── Dependencies (git submodules) ────────────────────────────────────────────
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/external/glfw/CMakeLists.txt"
    OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/glm/CMakeLists.txt"
-   OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/imgui/imgui.cpp")
+   OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/imgui/imgui.cpp"
+   OR NOT EXISTS "${CMAKE_SOURCE_DIR}/external/VulkanMemoryAllocator/include/vk_mem_alloc.h")
     message(FATAL_ERROR "Git submodules not initialized. Run: git submodule update --init --recursive")
 endif()
 
