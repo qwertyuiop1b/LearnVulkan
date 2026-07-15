@@ -1,0 +1,31 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Vulkan REQUIRED)
+find_dependency(glfw3 3.3 CONFIG REQUIRED)
+
+find_path(VKKIT_VMA_INCLUDE_DIR
+    NAMES vk_mem_alloc.h
+    HINTS ${Vulkan_INCLUDE_DIRS}
+    PATH_SUFFIXES vma)
+if(NOT VKKIT_VMA_INCLUDE_DIR)
+    message(FATAL_ERROR "VkKit requires vk_mem_alloc.h from Vulkan Memory Allocator (VMA)")
+endif()
+
+if(TARGET glfw)
+    set(VKKIT_GLFW_TARGET glfw)
+elseif(TARGET glfw::glfw)
+    set(VKKIT_GLFW_TARGET glfw::glfw)
+elseif(TARGET GLFW::glfw)
+    set(VKKIT_GLFW_TARGET GLFW::glfw)
+else()
+    message(FATAL_ERROR "VkKit requires a GLFW CMake target after find_dependency(glfw3)")
+endif()
+
+add_library(VkKit::Glfw INTERFACE IMPORTED)
+set_property(TARGET VkKit::Glfw PROPERTY INTERFACE_LINK_LIBRARIES ${VKKIT_GLFW_TARGET})
+
+add_library(VkKit::Vma INTERFACE IMPORTED)
+set_property(TARGET VkKit::Vma PROPERTY INTERFACE_INCLUDE_DIRECTORIES ${VKKIT_VMA_INCLUDE_DIR})
+
+include("${CMAKE_CURRENT_LIST_DIR}/VkKitTargets.cmake")

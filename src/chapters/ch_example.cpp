@@ -21,10 +21,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #define GLM_FORCE_RADINS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <stb_image.h>
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h>
 
 static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
 
@@ -132,6 +133,8 @@ struct SwapchainSupportedDetails {
 };
 
 const uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+const std::string MODEL_PATH = "assets/models/viking_room.obj";
+const std::string TEXTURE_PATH = "assets/textures/viking_room.png";
 
 struct Vertex {
     glm::vec3 pos;
@@ -176,20 +179,6 @@ struct UniformBufferObject {
     glm::mat4 view;
     glm::mat4 proj;
 };
-
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.f}},
-    {{0.5f, -0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.f, 0.f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-};
-
-const std::vector<uint16_t> indices = {0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4};
 
 class Example {
   public:
@@ -281,6 +270,9 @@ class Example {
 
     uint32_t currentFrame = 0;
     bool framebufferResized = false;
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
@@ -600,7 +592,7 @@ class Example {
             .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         };
 
-        VkAttachmentDescription depthAttachment {
+        VkAttachmentDescription depthAttachment{
             .format = findDepthFormat(),
             .samples = VK_SAMPLE_COUNT_1_BIT,
             .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -616,7 +608,7 @@ class Example {
             .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         };
 
-        VkAttachmentReference depthAttachmentRef {
+        VkAttachmentReference depthAttachmentRef{
             .attachment = 1,
             .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
         };
@@ -717,7 +709,7 @@ class Example {
             .primitiveRestartEnable = VK_FALSE,
         };
 
-        VkPipelineDepthStencilStateCreateInfo depthStencil {
+        VkPipelineDepthStencilStateCreateInfo depthStencil{
             .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
             .depthTestEnable = VK_TRUE,
             .depthWriteEnable = VK_TRUE,
@@ -1003,7 +995,7 @@ class Example {
     }
 
     void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) {
-        VkImageAspectFlags aspectMask ;
+        VkImageAspectFlags aspectMask;
         if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
             aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
             if (hasStencilCompent(format)) {
@@ -1047,9 +1039,11 @@ class Example {
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
+        } else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+                   newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) {
             barrier.srcAccessMask = 0;
-            barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            barrier.dstAccessMask =
+                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
             sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
             destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         } else {
@@ -1081,7 +1075,8 @@ class Example {
         endSingleTimeCommands(commandBuffer);
     }
 
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
+    VkFormat
+    findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
         for (VkFormat format : candidates) {
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
@@ -1100,20 +1095,30 @@ class Example {
     }
 
     VkFormat findDepthFormat() {
-        return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+        return findSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+                                   VK_IMAGE_TILING_OPTIMAL,
+                                   VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
 
     void createDepthResource() {
         VkFormat depthFormat = findDepthFormat();
-        createImage(imageExtent.width, imageExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthImageMemory);
+        createImage(imageExtent.width,
+                    imageExtent.height,
+                    depthFormat,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    depthImage,
+                    depthImageMemory);
         depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-        transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+        transitionImageLayout(
+            depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
     }
 
     void createTextureImage() {
         int texWidth, texHeight, texChannels;
-        auto pixels = stbi_load("assets/textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        auto pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
         if (pixels == nullptr) {
             throw std::runtime_error("Failed to load texture image!");
@@ -1207,6 +1212,36 @@ class Example {
         }
     }
 
+    void loadModel() {
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warn;
+        std::string err;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str())) {
+            throw std::runtime_error(err);
+        }
+
+        for (const auto& shape : shapes) {
+            for (const auto& index : shape.mesh.indices) {
+                Vertex vertex{};
+
+                vertex.pos = {attrib.vertices[3 * index.vertex_index + 0],
+                              attrib.vertices[3 * index.vertex_index + 1],
+                              attrib.vertices[3 * index.vertex_index + 2]};
+
+                vertex.texCoord = {attrib.texcoords[2 * index.texcoord_index + 0],
+                                   1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
+
+                vertex.color = {1.0f, 1.0f, 1.0f};
+
+                vertices.push_back(vertex);
+                indices.push_back(indices.size());
+            }
+        }
+    }
+
     void createVertexBuffer() {
         VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
 
@@ -1282,14 +1317,12 @@ class Example {
         if (vkBeginCommandBuffer(cmdBuf, &beginInfo) != VK_SUCCESS) {
             throw std::runtime_error("Failed to begin command buffer!");
         }
-        std::array<VkClearValue, 2> clearValues = {
-            VkClearValue {
-                .color = {0.f, 0.f, 0.f, 1.0f},
-            },
-            VkClearValue {
-                .depthStencil = {1.0f, 0},
-            }
-        };
+        std::array<VkClearValue, 2> clearValues = {VkClearValue{
+                                                       .color = {0.f, 0.f, 0.f, 1.0f},
+                                                   },
+                                                   VkClearValue{
+                                                       .depthStencil = {1.0f, 0},
+                                                   }};
         VkRenderPassBeginInfo renderPassInfo{
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass,
@@ -1307,7 +1340,7 @@ class Example {
         VkBuffer vertexBuffers[] = {vertexBuffer};
         VkDeviceSize offsets[] = {0};
         vkCmdBindVertexBuffers(cmdBuf, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(cmdBuf, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+        vkCmdBindIndexBuffer(cmdBuf, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         VkViewport viewport{
             .x = 0,
             .y = 0,
@@ -1510,6 +1543,7 @@ class Example {
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
+        loadModel();
         createVertexBuffer();
         createIndexBuffer();
         createUniformBuffer();

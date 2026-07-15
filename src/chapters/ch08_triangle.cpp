@@ -48,6 +48,7 @@
 #include <vulkan_tutorial/utils.hpp>
 
 #include <chrono>
+#include <cmath>
 #include <iostream>
 #include <set>
 #include <stdexcept>

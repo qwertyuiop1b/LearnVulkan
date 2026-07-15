@@ -38,6 +38,8 @@ add_subdirectory(external/glfw EXCLUDE_FROM_ALL)
 
 add_subdirectory(external/fmt EXCLUDE_FROM_ALL)
 
+add_subdirectory(external/tinyobjloader EXCLUDE_FROM_ALL)
+
 # ─── GLM ──────────────────────────────────────────────────────────────────────
 add_subdirectory(external/glm EXCLUDE_FROM_ALL)
 
@@ -162,7 +164,8 @@ add_library(vulkan_tutorial_assets STATIC
 target_include_directories(vulkan_tutorial_assets PUBLIC
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/external/stb
-    ${CMAKE_SOURCE_DIR}/external/cgltf)
+    ${CMAKE_SOURCE_DIR}/external/cgltf
+    ${CMAKE_SOURCE_DIR}/external/tinyobjloader)
 target_link_libraries(vulkan_tutorial_assets PUBLIC vulkan_tutorial_common glm::glm)
 
 add_library(vulkan_tutorial_interactive STATIC
@@ -189,6 +192,9 @@ target_include_directories(vulkan_tutorial_render_graph PUBLIC
     ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(vulkan_tutorial_render_graph PUBLIC
     vulkan_tutorial_common)
+
+# ─── VkKit: standalone RAII Vulkan primitives ─────────────────────────────────
+add_subdirectory(lib/VkKit)
 
 # ─── Engine library (ch61+) ──────────────────────────────────────────────────
 # 收集 src/engine/ 下所有 .cpp（按需添加）
