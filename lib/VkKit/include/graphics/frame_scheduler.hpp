@@ -1,6 +1,7 @@
 #pragma once
 
 #include <graphics/frame_context.hpp>
+#include <graphics/image_state_tracker.hpp>
 #include <graphics/swapchain.hpp>
 
 #include <cstdint>
@@ -53,7 +54,7 @@ class FrameScheduler final {
     void beginDynamicRendering(const DynamicRenderingInfo& renderingInfo = {});
     void endDynamicRendering();
     [[nodiscard]] SwapchainStatus endFrame(
-        vk::PipelineStageFlags imageAvailableWaitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        VkPipelineStageFlags2 imageAvailableWaitStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT);
     void recreateSwapchain(VkExtent2D desiredExtent);
 
     [[nodiscard]] bool frameInProgress() const noexcept;
@@ -63,14 +64,14 @@ class FrameScheduler final {
 
   private:
     void transitionSwapchainImage(vk::ImageLayout newLayout);
-    void resetSwapchainTracking() noexcept;
+    void resetSwapchainTracking();
     void ensureSwapchainHasNotChanged() const;
 
     const VulkanContext* context_ = nullptr;
     Swapchain* swapchain_ = nullptr;
     std::vector<std::unique_ptr<FrameContext>> frames_;
     std::vector<VkFence> imageInFlightFences_;
-    std::vector<vk::ImageLayout> imageLayouts_;
+    ImageStateTracker imageStateTracker_;
     VkSwapchainKHR trackedSwapchain_ = VK_NULL_HANDLE;
     uint32_t currentFrameIndex_ = 0;
     uint32_t currentImageIndex_ = 0;

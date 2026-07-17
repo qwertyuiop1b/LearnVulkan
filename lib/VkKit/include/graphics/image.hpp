@@ -1,5 +1,6 @@
 #pragma once
 
+#include <graphics/image_state_tracker.hpp>
 #include <graphics/vulkan_allocator.hpp>
 
 #include <cstdint>
@@ -45,12 +46,14 @@ class Image final {
     [[nodiscard]] uint32_t mipLevels() const noexcept;
     [[nodiscard]] uint32_t arrayLayers() const noexcept;
     [[nodiscard]] vk::ImageLayout layout() const noexcept;
+    [[nodiscard]] const ImageSubresourceState& subresourceState(uint32_t mipLevel = 0,
+                                                                  uint32_t arrayLayer = 0) const;
 
   private:
     friend class UploadContext;
 
     void destroy() noexcept;
-    void setLayout(vk::ImageLayout layout) noexcept;
+    void setState(const ImageSubresourceState& state);
 
     VulkanAllocator* allocator_ = nullptr;
     VkImage image_ = VK_NULL_HANDLE;
@@ -62,7 +65,7 @@ class Image final {
     vk::ImageAspectFlags aspectMask_{};
     uint32_t mipLevels_ = 0;
     uint32_t arrayLayers_ = 0;
-    vk::ImageLayout layout_ = vk::ImageLayout::eUndefined;
+    ImageStateTracker stateTracker_;
 };
 
 } // namespace vulkan_graphics

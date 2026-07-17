@@ -12,6 +12,8 @@ FrameScheduler::FrameScheduler(const VulkanContext& context, const FrameSchedule
     : context_(&context), swapchain_(createInfo.swapchain) {
     if (!context.dynamicRenderingEnabled())
         throw std::invalid_argument("FrameScheduler requires Dynamic Rendering enabled on VulkanContext");
+    if (!context.synchronization2Enabled())
+        throw std::invalid_argument("FrameScheduler requires Synchronization2 enabled on VulkanContext");
     if (swapchain_ == nullptr || !swapchain_->isValid())
         throw std::invalid_argument("FrameScheduler requires a valid Swapchain");
     if (createInfo.framesInFlight == 0)
@@ -109,7 +111,7 @@ void FrameScheduler::endDynamicRendering() {
     dynamicRenderingActive_ = false;
 }
 
-SwapchainStatus FrameScheduler::endFrame(vk::PipelineStageFlags imageAvailableWaitStage) {
+SwapchainStatus FrameScheduler::endFrame(VkPipelineStageFlags2 imageAvailableWaitStage) {
     if (activeFrame_ == nullptr)
         throw std::logic_error("Cannot end a frame when no frame is in progress");
     if (dynamicRenderingActive_)
@@ -123,19 +125,31 @@ SwapchainStatus FrameScheduler::endFrame(vk::PipelineStageFlags imageAvailableWa
 
     const VkSemaphore imageAvailableSemaphore = activeFrame_->imageAvailableSemaphore();
     const VkSemaphore renderFinishedSemaphore = activeFrame_->renderFinishedSemaphore();
-    const VkPipelineStageFlags waitStage = static_cast<VkPipelineStageFlags>(imageAvailableWaitStage);
     const VkCommandBuffer commandBuffer = activeFrame_->commandBuffer();
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = &imageAvailableSemaphore;
-    submitInfo.pWaitDstStageMask = &waitStage;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &renderFinishedSemaphore;
+    VkSemaphoreSubmitInfo waitInfo{};
+    waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    waitInfo.semaphore = imageAvailableSemaphore;
+    waitInfo.stageMask = imageAvailableWaitStage;
 
-    if (vkQueueSubmit(context_->graphicsQueue().handle, 1, &submitInfo, activeFrame_->inFlightFence()) != VK_SUCCESS) {
+    VkCommandBufferSubmitInfo commandBufferInfo{};
+    commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    commandBufferInfo.commandBuffer = commandBuffer;
+
+    VkSemaphoreSubmitInfo signalInfo{};
+    signalInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    signalInfo.semaphore = renderFinishedSemaphore;
+    signalInfo.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+
+    VkSubmitInfo2 submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submitInfo.waitSemaphoreInfoCount = 1;
+    submitInfo.pWaitSemaphoreInfos = &waitInfo;
+    submitInfo.commandBufferInfoCount = 1;
+    submitInfo.pCommandBufferInfos = &commandBufferInfo;
+    submitInfo.signalSemaphoreInfoCount = 1;
+    submitInfo.pSignalSemaphoreInfos = &signalInfo;
+
+    if (vkQueueSubmit2(context_->graphicsQueue().handle, 1, &submitInfo, activeFrame_->inFlightFence()) != VK_SUCCESS) {
         activeFrame_->recoverFence();
         activeFrame_ = nullptr;
         throw std::runtime_error("Failed to submit Vulkan frame command buffer");
@@ -181,12 +195,18 @@ uint32_t FrameScheduler::currentImageIndex() const {
 }
 
 void FrameScheduler::transitionSwapchainImage(vk::ImageLayout newLayout) {
-    const vk::ImageLayout oldLayout = imageLayouts_[currentImageIndex_];
+    const ImageSubresourceState oldState = imageStateTracker_.state(0, currentImageIndex_);
+    const vk::ImageLayout oldLayout = static_cast<vk::ImageLayout>(oldState.layout);
     if (oldLayout == newLayout)
         return;
 
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    ImageSubresourceState newState{};
+    newState.layout = static_cast<VkImageLayout>(newLayout);
+
+    VkImageMemoryBarrier2 barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+    barrier.srcStageMask = oldState.stageMask;
+    barrier.srcAccessMask = oldState.accessMask;
     barrier.oldLayout = static_cast<VkImageLayout>(oldLayout);
     barrier.newLayout = static_cast<VkImageLayout>(newLayout);
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -198,36 +218,37 @@ void FrameScheduler::transitionSwapchainImage(vk::ImageLayout newLayout) {
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     if (newLayout == vk::ImageLayout::eColorAttachmentOptimal) {
         if (oldLayout != vk::ImageLayout::eUndefined && oldLayout != vk::ImageLayout::ePresentSrcKHR)
             throw std::logic_error("Swapchain image has an unsupported layout before Dynamic Rendering");
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        newState.stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+        newState.accessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     } else if (newLayout == vk::ImageLayout::ePresentSrcKHR) {
         if (oldLayout != vk::ImageLayout::eUndefined && oldLayout != vk::ImageLayout::eColorAttachmentOptimal)
             throw std::logic_error("Swapchain image has an unsupported layout before presentation");
-        barrier.srcAccessMask = oldLayout == vk::ImageLayout::eColorAttachmentOptimal ? VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT : 0;
-        sourceStage = oldLayout == vk::ImageLayout::eColorAttachmentOptimal ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                                                              : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
     } else {
         throw std::invalid_argument("FrameScheduler supports only color-attachment and present swapchain layouts");
     }
 
-    vkCmdPipelineBarrier(activeFrame_->commandBuffer(), sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1,
-                         &barrier);
-    imageLayouts_[currentImageIndex_] = newLayout;
+    barrier.dstStageMask = newState.stageMask;
+    barrier.dstAccessMask = newState.accessMask;
+    VkDependencyInfo dependencyInfo{};
+    dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+    dependencyInfo.imageMemoryBarrierCount = 1;
+    dependencyInfo.pImageMemoryBarriers = &barrier;
+    vkCmdPipelineBarrier2(activeFrame_->commandBuffer(), &dependencyInfo);
+    imageStateTracker_.setState(0, currentImageIndex_, newState);
 }
 
-void FrameScheduler::resetSwapchainTracking() noexcept {
+void FrameScheduler::resetSwapchainTracking() {
     trackedSwapchain_ = swapchain_->nativeHandle();
     imageInFlightFences_.assign(swapchain_->imageCount(), VK_NULL_HANDLE);
-    imageLayouts_.assign(swapchain_->imageCount(), vk::ImageLayout::eUndefined);
+    imageStateTracker_ = ImageStateTracker{1, swapchain_->imageCount()};
 }
 
 void FrameScheduler::ensureSwapchainHasNotChanged() const {
-    if (swapchain_->nativeHandle() != trackedSwapchain_ || swapchain_->imageCount() != imageInFlightFences_.size()) {
+    if (swapchain_->nativeHandle() != trackedSwapchain_ || swapchain_->imageCount() != imageInFlightFences_.size() ||
+        imageStateTracker_.arrayLayers() != swapchain_->imageCount()) {
         throw std::logic_error("Swapchain changed outside FrameScheduler; use FrameScheduler::recreateSwapchain");
     }
 }

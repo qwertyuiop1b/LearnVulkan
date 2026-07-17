@@ -20,6 +20,7 @@ struct VulkanContextCreateInfo {
     bool enableValidation = true;
     bool preferDiscreteGpu = true;
     bool requireDynamicRendering = true;
+    bool requireSynchronization2 = true;
     bool requireSamplerAnisotropy = false;
     std::vector<const char*> requiredDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 };
@@ -53,6 +54,7 @@ class VulkanContext final {
     [[nodiscard]] VkFormat depthFormat() const noexcept;
     [[nodiscard]] bool validationEnabled() const noexcept;
     [[nodiscard]] bool dynamicRenderingEnabled() const noexcept;
+    [[nodiscard]] bool synchronization2Enabled() const noexcept;
     [[nodiscard]] bool samplerAnisotropyEnabled() const noexcept;
 
     void waitIdle() const;

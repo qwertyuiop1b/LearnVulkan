@@ -67,6 +67,7 @@ Image::Image(VulkanAllocator& allocator, const ImageCreateInfo& createInfo) : al
     aspectMask_ = createInfo.aspectMask;
     mipLevels_ = createInfo.mipLevels;
     arrayLayers_ = createInfo.arrayLayers;
+    stateTracker_ = ImageStateTracker{mipLevels_, arrayLayers_};
 }
 
 Image::~Image() noexcept {
@@ -84,7 +85,9 @@ Image::Image(Image&& other) noexcept
       aspectMask_(std::exchange(other.aspectMask_, {})),
       mipLevels_(std::exchange(other.mipLevels_, 0)),
       arrayLayers_(std::exchange(other.arrayLayers_, 0)),
-      layout_(std::exchange(other.layout_, vk::ImageLayout::eUndefined)) {}
+      stateTracker_(std::move(other.stateTracker_)) {
+    other.stateTracker_.reset();
+}
 
 Image& Image::operator=(Image&& other) noexcept {
     if (this == &other)
@@ -101,7 +104,8 @@ Image& Image::operator=(Image&& other) noexcept {
     aspectMask_ = std::exchange(other.aspectMask_, {});
     mipLevels_ = std::exchange(other.mipLevels_, 0);
     arrayLayers_ = std::exchange(other.arrayLayers_, 0);
-    layout_ = std::exchange(other.layout_, vk::ImageLayout::eUndefined);
+    stateTracker_ = std::move(other.stateTracker_);
+    other.stateTracker_.reset();
     return *this;
 }
 
@@ -150,7 +154,12 @@ uint32_t Image::arrayLayers() const noexcept {
 }
 
 vk::ImageLayout Image::layout() const noexcept {
-    return layout_;
+    return stateTracker_.isValid() ? static_cast<vk::ImageLayout>(stateTracker_.state().layout)
+                                   : vk::ImageLayout::eUndefined;
+}
+
+const ImageSubresourceState& Image::subresourceState(uint32_t mipLevel, uint32_t arrayLayer) const {
+    return stateTracker_.state(mipLevel, arrayLayer);
 }
 
 void Image::destroy() noexcept {
@@ -169,11 +178,11 @@ void Image::destroy() noexcept {
     aspectMask_ = {};
     mipLevels_ = 0;
     arrayLayers_ = 0;
-    layout_ = vk::ImageLayout::eUndefined;
+    stateTracker_.reset();
 }
 
-void Image::setLayout(vk::ImageLayout layout) noexcept {
-    layout_ = layout;
+void Image::setState(const ImageSubresourceState& state) {
+    stateTracker_.setRange(0, mipLevels_, 0, arrayLayers_, state);
 }
 
 } // namespace vulkan_graphics

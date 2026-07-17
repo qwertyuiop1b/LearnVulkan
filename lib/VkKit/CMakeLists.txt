@@ -43,6 +43,7 @@ add_library(VkKit
     src/graphics/frame_scheduler.cpp
     src/graphics/graphics_pipeline.cpp
     src/graphics/image.cpp
+    src/graphics/image_state_tracker.cpp
     src/graphics/pipeline_layout.cpp
     src/graphics/sampler.cpp
     src/graphics/shader_module.cpp

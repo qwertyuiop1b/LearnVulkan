@@ -35,6 +35,8 @@ UploadContext::UploadContext(const VulkanContext& context)
     : context_(&context), commandPool_(context, context.graphicsQueue().familyIndex) {
     if (context.graphicsQueue().handle == vk::Queue{})
         throw std::invalid_argument("UploadContext requires a graphics queue");
+    if (!context.synchronization2Enabled())
+        throw std::invalid_argument("UploadContext requires Synchronization2 enabled on VulkanContext");
     queue_ = static_cast<VkQueue>(context.graphicsQueue().handle);
 
     VkFenceCreateInfo createInfo{};
@@ -73,38 +75,38 @@ void UploadContext::copyBuffer(const Buffer& source,
 void UploadContext::transitionImageLayout(Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
     if (!image.isValid())
         throw std::invalid_argument("Image layout transition requires a valid image");
-    if (image.layout() != oldLayout)
+    const ImageSubresourceState sourceState = image.subresourceState();
+    if (sourceState.layout != static_cast<VkImageLayout>(oldLayout) || !image.stateTracker_.hasUniformState(sourceState))
         throw std::logic_error("Image layout transition does not match the tracked layout");
     if (oldLayout == newLayout)
         return;
 
-    VkAccessFlags sourceAccess = 0;
-    VkAccessFlags destinationAccess = 0;
-    VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    ImageSubresourceState destinationState{};
+    destinationState.layout = static_cast<VkImageLayout>(newLayout);
+    destinationState.queueFamilyIndex = context_->graphicsQueue().familyIndex;
 
     if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
         if (!(image.usage() & vk::ImageUsageFlagBits::eTransferDst))
             throw std::invalid_argument("Transfer-destination layout requires transfer-destination image usage");
-        destinationAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        destinationState.stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+        destinationState.accessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
     } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
                newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
         if (!(image.usage() & vk::ImageUsageFlagBits::eSampled))
             throw std::invalid_argument("Shader-read layout requires sampled image usage");
-        sourceAccess = VK_ACCESS_TRANSFER_WRITE_BIT;
-        destinationAccess = VK_ACCESS_SHADER_READ_BIT;
-        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        destinationState.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+        destinationState.accessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
     } else {
         throw std::invalid_argument("Unsupported image layout transition");
     }
 
     executeAndWait([&](VkCommandBuffer commandBuffer) {
-        VkImageMemoryBarrier barrier{};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.srcAccessMask = sourceAccess;
-        barrier.dstAccessMask = destinationAccess;
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        barrier.srcStageMask = sourceState.stageMask;
+        barrier.srcAccessMask = sourceState.accessMask;
+        barrier.dstStageMask = destinationState.stageMask;
+        barrier.dstAccessMask = destinationState.accessMask;
         barrier.oldLayout = static_cast<VkImageLayout>(oldLayout);
         barrier.newLayout = static_cast<VkImageLayout>(newLayout);
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -116,18 +118,13 @@ void UploadContext::transitionImageLayout(Image& image, vk::ImageLayout oldLayou
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = image.arrayLayers();
 
-        vkCmdPipelineBarrier(commandBuffer,
-                             sourceStage,
-                             destinationStage,
-                             0,
-                             0,
-                             nullptr,
-                             0,
-                             nullptr,
-                             1,
-                             &barrier);
+        VkDependencyInfo dependencyInfo{};
+        dependencyInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+        dependencyInfo.imageMemoryBarrierCount = 1;
+        dependencyInfo.pImageMemoryBarriers = &barrier;
+        vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
     });
-    image.setLayout(newLayout);
+    image.setState(destinationState);
 }
 
 void UploadContext::copyBufferToImage(const Buffer& source, Image& destination) {
@@ -204,11 +201,15 @@ VkCommandBuffer UploadContext::allocateCommandBuffer() {
 void UploadContext::submitAndWait(VkCommandBuffer commandBuffer, bool& submitted) {
     checkResult(vkResetFences(static_cast<VkDevice>(context_->device()), 1, &completionFence_), "vkResetFences");
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-    checkResult(vkQueueSubmit(queue_, 1, &submitInfo, completionFence_), "vkQueueSubmit");
+    VkCommandBufferSubmitInfo commandBufferInfo{};
+    commandBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    commandBufferInfo.commandBuffer = commandBuffer;
+
+    VkSubmitInfo2 submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submitInfo.commandBufferInfoCount = 1;
+    submitInfo.pCommandBufferInfos = &commandBufferInfo;
+    checkResult(vkQueueSubmit2(queue_, 1, &submitInfo, completionFence_), "vkQueueSubmit2");
     submitted = true;
     checkResult(vkWaitForFences(static_cast<VkDevice>(context_->device()), 1, &completionFence_, VK_TRUE,
                                 std::numeric_limits<uint64_t>::max()),

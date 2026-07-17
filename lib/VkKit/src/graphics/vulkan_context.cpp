@@ -118,14 +118,25 @@ int scoreDevice(const vk::raii::PhysicalDevice& physicalDevice, bool preferDiscr
     return score;
 }
 
-bool supportsDynamicRendering(const vk::raii::PhysicalDevice& physicalDevice) {
+bool supportsRequiredVulkan13Features(const vk::raii::PhysicalDevice& physicalDevice,
+                                      bool requireDynamicRendering,
+                                      bool requireSynchronization2) {
     VkPhysicalDeviceDynamicRenderingFeatures dynamicRenderingFeatures{};
     dynamicRenderingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
+    VkPhysicalDeviceSynchronization2Features synchronization2Features{};
+    synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+
     VkPhysicalDeviceFeatures2 features{};
     features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-    features.pNext = &dynamicRenderingFeatures;
+    if (requireDynamicRendering)
+        features.pNext = &dynamicRenderingFeatures;
+    if (requireSynchronization2) {
+        synchronization2Features.pNext = features.pNext;
+        features.pNext = &synchronization2Features;
+    }
     vkGetPhysicalDeviceFeatures2(static_cast<VkPhysicalDevice>(*physicalDevice), &features);
-    return dynamicRenderingFeatures.dynamicRendering == VK_TRUE;
+    return (!requireDynamicRendering || dynamicRenderingFeatures.dynamicRendering == VK_TRUE) &&
+           (!requireSynchronization2 || synchronization2Features.synchronization2 == VK_TRUE);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL debugCallbackHpp(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -156,6 +167,7 @@ struct VulkanContext::Impl {
     uint32_t apiVersion = VK_API_VERSION_1_0;
     bool validationEnabled = false;
     bool dynamicRenderingEnabled = false;
+    bool synchronization2Enabled = false;
     bool samplerAnisotropyEnabled = false;
 };
 
@@ -169,8 +181,10 @@ VulkanContext::VulkanContext(const VulkanContextCreateInfo& createInfo) {
         throw std::runtime_error("Requested Vulkan validation layers are unavailable");
     if (impl->context.enumerateInstanceVersion() < createInfo.apiVersion)
         throw std::runtime_error("Requested Vulkan API version is unavailable");
-    if (createInfo.requireDynamicRendering && createInfo.apiVersion < VK_API_VERSION_1_3)
-        throw std::invalid_argument("Dynamic rendering requires Vulkan API version 1.3 or later");
+    if ((createInfo.requireDynamicRendering || createInfo.requireSynchronization2) &&
+        createInfo.apiVersion < VK_API_VERSION_1_3) {
+        throw std::invalid_argument("Dynamic rendering and Synchronization2 require Vulkan API version 1.3 or later");
+    }
     impl->apiVersion = createInfo.apiVersion;
 
     uint32_t glfwExtensionCount = 0;
@@ -234,8 +248,11 @@ VulkanContext::VulkanContext(const VulkanContextCreateInfo& createInfo) {
         const auto supportedFeatures = candidate.getFeatures();
         if (createInfo.requireSamplerAnisotropy && !supportedFeatures.samplerAnisotropy)
             continue;
-        if (createInfo.requireDynamicRendering && !supportsDynamicRendering(candidate))
+        if (!supportsRequiredVulkan13Features(candidate,
+                                              createInfo.requireDynamicRendering,
+                                              createInfo.requireSynchronization2)) {
             continue;
+        }
 
         const int score = scoreDevice(candidate, createInfo.preferDiscreteGpu);
         if (score > bestScore) {
@@ -271,13 +288,24 @@ VulkanContext::VulkanContext(const VulkanContextCreateInfo& createInfo) {
     dynamicRenderingFeatures.dynamicRendering = createInfo.requireDynamicRendering;
     impl->dynamicRenderingEnabled = createInfo.requireDynamicRendering;
 
+    VkPhysicalDeviceSynchronization2Features synchronization2Features{};
+    synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    synchronization2Features.synchronization2 = createInfo.requireSynchronization2;
+    synchronization2Features.pNext = createInfo.requireDynamicRendering ? &dynamicRenderingFeatures : nullptr;
+    impl->synchronization2Enabled = createInfo.requireSynchronization2;
+
     vk::DeviceCreateInfo deviceInfo{};
     deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueInfos.size());
     deviceInfo.pQueueCreateInfos = queueInfos.data();
     deviceInfo.enabledExtensionCount = static_cast<uint32_t>(createInfo.requiredDeviceExtensions.size());
     deviceInfo.ppEnabledExtensionNames = createInfo.requiredDeviceExtensions.data();
     deviceInfo.pEnabledFeatures = &enabledFeatures;
-    deviceInfo.pNext = createInfo.requireDynamicRendering ? &dynamicRenderingFeatures : nullptr;
+    void* enabledFeatureChain = nullptr;
+    if (createInfo.requireDynamicRendering)
+        enabledFeatureChain = &dynamicRenderingFeatures;
+    if (createInfo.requireSynchronization2)
+        enabledFeatureChain = &synchronization2Features;
+    deviceInfo.pNext = enabledFeatureChain;
     impl->device = vk::raii::Device{impl->physicalDevice, deviceInfo};
 
     const auto queueProperties = impl->physicalDevice.getQueueFamilyProperties();
@@ -353,6 +381,10 @@ bool VulkanContext::validationEnabled() const noexcept {
 
 bool VulkanContext::dynamicRenderingEnabled() const noexcept {
     return impl_ && impl_->dynamicRenderingEnabled;
+}
+
+bool VulkanContext::synchronization2Enabled() const noexcept {
+    return impl_ && impl_->synchronization2Enabled;
 }
 
 bool VulkanContext::samplerAnisotropyEnabled() const noexcept {

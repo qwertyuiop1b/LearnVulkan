@@ -81,6 +81,8 @@ VulkanContext ──────────────► graphics / present /
     │             │
     │             └─────────► VMA allocation
     │
+    ├──► ImageStateTracker ─► 每个 mip/layer 的 layout、stage、access 状态
+    │
     ├──► CommandPool ───────► UploadContext
     │
     ├──► ShaderModule + DescriptorSetLayout ───► PipelineLayout ───► GraphicsPipeline
@@ -137,11 +139,11 @@ GLFWwindow
 | --- | --- | --- |
 | `VulkanContextCreateInfo` | 创建 context 的参数 | window、API version、validation、dynamic rendering、sampler anisotropy、device extensions |
 | `Queue` | 逻辑设备 queue 的描述 | `handle`、`familyIndex`、timestamp 支持信息 |
-| `VulkanContext` | instance/surface/physical device/device/queues 的根所有者 | 默认请求 Vulkan 1.3、swapchain extension 和 Dynamic Rendering |
+| `VulkanContext` | instance/surface/physical device/device/queues 的根所有者 | 默认请求 Vulkan 1.3、swapchain extension、Dynamic Rendering 与 Synchronization2 |
 | `VulkanAllocator` | VMA allocator 的 RAII 包装 | 为 buffer/image 分配内存；可查询统计与预算 |
 | `HeapStatistics` / `AllocatorStatistics` / `MemoryBudget` | VMA 内存可观测性数据 | 用于调试内存压力和预算 |
 
-`VulkanContext` 在创建时选择同时满足 surface present、device extension、swapchain 支持和所请求 feature 的物理设备。默认的 `requireDynamicRendering = true` 会要求设备支持 Dynamic Rendering。
+`VulkanContext` 在创建时选择同时满足 surface present、device extension、swapchain 支持和所请求 feature 的物理设备。默认的 `requireDynamicRendering = true` 与 `requireSynchronization2 = true` 会要求设备支持 Dynamic Rendering 和 Synchronization2。
 
 ### 2. Buffer、Image、Sampler 与 Texture
 
@@ -151,6 +153,8 @@ GLFWwindow
 | `Buffer` | VMA 管理的 `VkBuffer` | `write`、`flush`、`invalidate`；支持 GPU-only、CPU-to-GPU、GPU-to-CPU |
 | `ImageCreateInfo` | 2D image 创建参数 | extent、format、usage、aspect、mip/layer、samples、tiling、queue family |
 | `Image` | VMA 管理的 `VkImage` 与默认 image view | 记录当前 layout，供 `UploadContext` 使用 |
+| `ImageSubresourceState` | 一个 image subresource 的同步状态 | layout、Synchronization2 stage/access mask、queue family |
+| `ImageStateTracker` | 按 mip/layer 跟踪 image 状态 | 为后续 subresource barrier 与多 pass 渲染提供基础 |
 | `SamplerCreateInfo` | sampler 过滤、寻址、LOD、比较、各向异性参数 | 启用 anisotropy 前 context 必须实际启用该 feature |
 | `Sampler` | `VkSampler` RAII 包装 | 可与 `Image` 组合使用 |
 | `TextureCreateInfo` | 内存中的纹理像素参数 | extent、像素数据、字节数、format、sampler 参数 |
@@ -165,7 +169,7 @@ GLFWwindow
 
 #### Image layout 约束
 
-`UploadContext::transitionImageLayout` 当前只提供以下同步上传路径：
+`Image` 内部通过 `ImageStateTracker` 按 mip/layer 记录 layout、stage 与 access；`UploadContext` 通过 Synchronization2 barrier 更新这些状态。当前 `UploadContext::transitionImageLayout` 仍只提供以下同步上传路径：
 
 ```text
 Undefined → TransferDstOptimal → ShaderReadOnlyOptimal
@@ -252,7 +256,7 @@ renderFinishedSemaphore: graphics queue submit → vkQueuePresentKHR
 inFlightFence:           graphics queue submit → CPU 等待后复用本帧 command buffer
 ```
 
-`FrameScheduler` 额外维护 `imageInFlightFences_`，所以当 swapchain image 数多于或少于 frames-in-flight 数时，仍不会把同一 image 同时交给多个 GPU submission 写入。
+`FrameScheduler` 额外维护 `imageInFlightFences_` 与每张 swapchain image 的 `ImageStateTracker` 状态，所以当 swapchain image 数多于或少于 frames-in-flight 数时，仍不会把同一 image 同时交给多个 GPU submission 写入。提交与 layout barrier 使用 `VkSubmitInfo2`、`VkImageMemoryBarrier2` 和 `vkCmdPipelineBarrier2`。
 
 ## 典型用法
 
@@ -357,7 +361,7 @@ void drawFrame(FrameScheduler& scheduler,
 - descriptor indexing、bindless descriptor、push descriptor。
 - graphics pipeline cache、pipeline library、compute pipeline、ray tracing pipeline。
 - 自动创建 depth/MSAA render target；`FrameScheduler` 可接受外部 depth/stencil view，但其 image 创建和 layout transition 由应用负责。
-- Vulkan Synchronization2、timeline semaphore、异步 transfer queue、批量/异步 resource upload。
+- timeline semaphore、异步 transfer queue、批量/异步 resource upload。
 - render graph、资源别名、barrier 自动推导、GPU profiler。
 
 这些边界是有意保留的：当前库优先提供清晰的资源边界和可组合的 Vulkan 基元，而不是在基础层隐藏全部 Vulkan 细节。
