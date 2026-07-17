@@ -32,24 +32,24 @@ else()
 endif()
 
 add_library(VkKit
-    src/graphics/vulkan_context.cpp
-    src/graphics/vulkan_allocator.cpp
-    src/graphics/buffer.cpp
-    src/graphics/command_pool.cpp
-    src/graphics/descriptor_pool.cpp
-    src/graphics/descriptor_set.cpp
-    src/graphics/descriptor_set_layout.cpp
-    src/graphics/frame_context.cpp
-    src/graphics/frame_scheduler.cpp
-    src/graphics/graphics_pipeline.cpp
-    src/graphics/image.cpp
-    src/graphics/image_state_tracker.cpp
-    src/graphics/pipeline_layout.cpp
-    src/graphics/sampler.cpp
-    src/graphics/shader_module.cpp
-    src/graphics/swapchain.cpp
-    src/graphics/texture.cpp
-    src/graphics/upload_context.cpp
+    src/graphics/core/vulkan_context.cpp
+    src/graphics/memory/vulkan_allocator.cpp
+    src/graphics/memory/buffer.cpp
+    src/graphics/memory/image.cpp
+    src/graphics/memory/image_state_tracker.cpp
+    src/graphics/memory/sampler.cpp
+    src/graphics/memory/texture.cpp
+    src/graphics/shader/descriptor_pool.cpp
+    src/graphics/shader/descriptor_set.cpp
+    src/graphics/shader/descriptor_set_layout.cpp
+    src/graphics/shader/pipeline_layout.cpp
+    src/graphics/shader/shader_module.cpp
+    src/graphics/pipeline/graphics_pipeline.cpp
+    src/graphics/render/frame_scheduler.cpp
+    src/graphics/render/swapchain.cpp
+    src/graphics/command/command_pool.cpp
+    src/graphics/command/frame_context.cpp
+    src/graphics/resource/upload_context.cpp
     src/vma_impl.cpp)
 add_library(VkKit::VkKit ALIAS VkKit)
 

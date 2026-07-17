@@ -71,6 +71,32 @@ target_link_libraries(MyApplication PRIVATE VkKit::VkKit)
 
 ## 架构
 
+### 目录布局
+
+```text
+include/graphics/                  # 公开头文件
+├── core/                          # VulkanContext、设备、队列与能力
+├── memory/                        # VMA、Buffer、Image、Texture、Sampler
+├── shader/                        # Shader、Descriptor、PipelineLayout
+├── pipeline/                      # GraphicsPipeline 与渲染状态
+├── render/                        # Swapchain、RenderTarget、FrameScheduler
+├── command/                       # CommandPool、FrameContext 与同步对象
+├── resource/                      # UploadContext；后续扩展 Mesh/Material/Asset
+└── utils/                         # 错误、格式转换、命名和诊断工具预留
+
+src/graphics/                      # 与公开模块对应的实现
+├── core/
+├── memory/
+├── shader/
+├── pipeline/
+├── render/
+├── command/
+├── resource/
+└── utils/
+```
+
+旧的扁平 include 路径（例如 `<graphics/buffer.hpp>`）保留为兼容转发头；新代码应使用分类路径（例如 `<graphics/memory/buffer.hpp>`）。
+
 ```text
 GLFWwindow
     │
