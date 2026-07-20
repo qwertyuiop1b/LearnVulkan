@@ -5,7 +5,7 @@
 .cache
 .bin
 *.spv
-*.obj
+
 
 build/
 imgui.ini
