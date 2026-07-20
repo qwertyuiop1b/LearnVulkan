@@ -600,9 +600,7 @@ class Ch17App {
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
 #ifdef __APPLE__
-#ifdef __APPLE__
-        ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(ci);
 
 #endif
         if (ENABLE_VALIDATION_LAYERS) {

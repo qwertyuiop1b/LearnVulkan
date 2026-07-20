@@ -20,6 +20,7 @@
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <vulkan_tutorial/portability.hpp>
 #define GLM_FORCE_RADINS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -346,9 +347,7 @@ class Example {
             .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
             .ppEnabledExtensionNames = extensions.data(),
         };
-#ifdef __APPLE__
-        instanceCI.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(instanceCI);
         auto debugCreateInfo = getDebugUtilsCreateInfo();
         if (enable_validation_layers) {
             instanceCI.enabledLayerCount = validationLayers.size();

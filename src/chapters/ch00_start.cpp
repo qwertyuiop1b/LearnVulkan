@@ -18,6 +18,7 @@
 #include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <vulkan_tutorial/portability.hpp>
 
 namespace hhq {
 
@@ -243,9 +244,7 @@ class App {
         createInfo.ppEnabledExtensionNames = extensions.data();
         createInfo.enabledLayerCount = 0;
         createInfo.ppEnabledLayerNames = nullptr;
-#ifdef __APPLE__
-        createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(createInfo);
         auto debugMessengerInfo = populateDebugMessengerCreateInfo();
         if (ENABLE_LAYER_VALIDATION) {
             createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -755,7 +754,6 @@ class App {
         if (result != VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate command buffers");
         }
-
     }
 
     void createRenderFinishedSemaphores() {
@@ -791,7 +789,6 @@ class App {
         }
 
         createRenderFinishedSemaphores();
-
     }
 
     void initVulkan() {
@@ -820,7 +817,8 @@ class App {
         }
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(
+            device, swapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             reCreateSwapchain();
             return;
@@ -831,10 +829,10 @@ class App {
         vkResetFences(device, 1, &inFlightFences[currentFrame]);
         vkResetCommandBuffer(commandBuffers[currentFrame], 0);
         recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
-        VkSubmitInfo submitInfo {
+        VkSubmitInfo submitInfo{
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         };
-        VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+        VkSemaphore waitSemaphores[] = {imageAvailableSemaphores[currentFrame]};
         VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
@@ -847,8 +845,8 @@ class App {
         submitInfo.pSignalSemaphores = signalSemaphores;
         if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
             throw std::runtime_error("Failed to submit draw command buffer");
-        } 
-        VkPresentInfoKHR presentInfo {
+        }
+        VkPresentInfoKHR presentInfo{
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
             .pWaitSemaphores = signalSemaphores,
@@ -871,7 +869,7 @@ class App {
     }
 
     void cleanupSwapchain() {
-        for (const auto& framebuffer: framebuffers) {
+        for (const auto& framebuffer : framebuffers) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
         framebuffers.clear();

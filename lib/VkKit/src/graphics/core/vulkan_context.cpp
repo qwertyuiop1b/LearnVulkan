@@ -161,8 +161,10 @@ struct VulkanContext::Impl {
     Queue graphicsQueue{};
     Queue presentQueue{};
     Queue computeQueue{};
+
     vk::PhysicalDeviceProperties properties{};
     vk::PhysicalDeviceMemoryProperties memoryProperties{};
+    
     VkFormat depthFormat = VK_FORMAT_UNDEFINED;
     uint32_t apiVersion = VK_API_VERSION_1_0;
     bool validationEnabled = false;

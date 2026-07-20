@@ -41,9 +41,6 @@
 #include <iostream>
 #include <stdexcept>
 
-// ─── vkCreateDebugUtilsMessengerEXT 不在 Vulkan 核心中 ──────────────────────
-// 需要通过 vkGetInstanceProcAddr 动态加载
-
 static VkResult createDebugUtilsMessengerEXT(VkInstance instance,
                                              const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
                                              const VkAllocationCallbacks* pAllocator,
@@ -114,10 +111,7 @@ class Ch01App {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
-        // macOS + MoltenVK 必须设置此标志，允许枚举非完全符合规范的物理设备
-#ifdef __APPLE__
-        createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(createInfo);
 
         // ④ 配置验证层
         //   注意：在 pNext 中传入 debugCreateInfo，可以捕获

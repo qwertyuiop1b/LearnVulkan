@@ -185,9 +185,7 @@ class Ch02App {
         ci.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         ci.ppEnabledExtensionNames = extensions.data();
 #ifdef __APPLE__
-#ifdef __APPLE__
-        ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(ci);
 
 #endif
 

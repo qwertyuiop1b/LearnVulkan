@@ -178,9 +178,7 @@ inline void createInstance(VkInstance& instance) {
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
-#ifdef __APPLE__
-    createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+    enablePortabilityBit(createInfo);
     std::array<VkValidationFeatureEnableEXT, 2> validationEnables = {
         VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
         VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT};

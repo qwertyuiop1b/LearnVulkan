@@ -1476,9 +1476,7 @@ class Ch20App {
         ci.pApplicationInfo = &ai;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
-#ifdef __APPLE__
-        ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(ci);
 
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());

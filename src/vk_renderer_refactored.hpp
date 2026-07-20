@@ -9,6 +9,7 @@
 #pragma once
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <vulkan_tutorial/portability.hpp>
 #include <vector>
 #include <memory>
 #include <stdexcept>
@@ -111,9 +112,7 @@ class VkContext {
         createInfo.pApplicationInfo = &appInfo;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         createInfo.ppEnabledExtensionNames = exts.data();
-#ifdef __APPLE__
-        createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+        enablePortabilityBit(createInfo);
 
         if (vkCreateInstance(&createInfo, nullptr, &instance_) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create VkInstance");
