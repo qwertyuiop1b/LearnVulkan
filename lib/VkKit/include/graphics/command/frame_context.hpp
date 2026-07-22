@@ -17,8 +17,6 @@ class FrameContext final {
 
     [[nodiscard]] VkCommandBuffer commandBuffer() const noexcept;
     [[nodiscard]] vk::CommandBuffer commandBufferHandle() const noexcept;
-    [[nodiscard]] VkSemaphore imageAvailableSemaphore() const noexcept;
-    [[nodiscard]] VkSemaphore renderFinishedSemaphore() const noexcept;
     [[nodiscard]] VkFence inFlightFence() const noexcept;
 
   private:
@@ -36,8 +34,6 @@ class FrameContext final {
     const VulkanContext* context_ = nullptr;
     CommandPool commandPool_;
     VkCommandBuffer commandBuffer_ = VK_NULL_HANDLE;
-    VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
-    VkSemaphore renderFinishedSemaphore_ = VK_NULL_HANDLE;
     VkFence inFlightFence_ = VK_NULL_HANDLE;
 };
 

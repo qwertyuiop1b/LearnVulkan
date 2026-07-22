@@ -18,17 +18,6 @@ FrameContext::FrameContext(const VulkanContext& context)
             throw std::runtime_error("Failed to allocate Vulkan frame command buffer");
         }
 
-        VkSemaphoreCreateInfo semaphoreInfo{};
-        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-        if (vkCreateSemaphore(static_cast<VkDevice>(context.device()), &semaphoreInfo, nullptr, &imageAvailableSemaphore_) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to create Vulkan image-available semaphore");
-        }
-        if (vkCreateSemaphore(static_cast<VkDevice>(context.device()), &semaphoreInfo, nullptr, &renderFinishedSemaphore_) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to create Vulkan render-finished semaphore");
-        }
-
         VkFenceCreateInfo fenceInfo{};
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -50,14 +39,6 @@ VkCommandBuffer FrameContext::commandBuffer() const noexcept {
 
 vk::CommandBuffer FrameContext::commandBufferHandle() const noexcept {
     return vk::CommandBuffer{commandBuffer_};
-}
-
-VkSemaphore FrameContext::imageAvailableSemaphore() const noexcept {
-    return imageAvailableSemaphore_;
-}
-
-VkSemaphore FrameContext::renderFinishedSemaphore() const noexcept {
-    return renderFinishedSemaphore_;
 }
 
 VkFence FrameContext::inFlightFence() const noexcept {
@@ -107,15 +88,9 @@ void FrameContext::destroy() noexcept {
         const VkDevice device = static_cast<VkDevice>(context_->device());
         if (inFlightFence_ != VK_NULL_HANDLE)
             vkDestroyFence(device, inFlightFence_, nullptr);
-        if (renderFinishedSemaphore_ != VK_NULL_HANDLE)
-            vkDestroySemaphore(device, renderFinishedSemaphore_, nullptr);
-        if (imageAvailableSemaphore_ != VK_NULL_HANDLE)
-            vkDestroySemaphore(device, imageAvailableSemaphore_, nullptr);
     }
 
     commandBuffer_ = VK_NULL_HANDLE;
-    imageAvailableSemaphore_ = VK_NULL_HANDLE;
-    renderFinishedSemaphore_ = VK_NULL_HANDLE;
     inFlightFence_ = VK_NULL_HANDLE;
     context_ = nullptr;
 }

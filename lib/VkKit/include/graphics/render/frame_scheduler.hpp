@@ -43,7 +43,7 @@ struct DynamicRenderingInfo {
 class FrameScheduler final {
   public:
     FrameScheduler(const VulkanContext& context, const FrameSchedulerCreateInfo& createInfo);
-    ~FrameScheduler() = default;
+    ~FrameScheduler() noexcept;
 
     FrameScheduler(const FrameScheduler&) = delete;
     FrameScheduler& operator=(const FrameScheduler&) = delete;
@@ -66,11 +66,19 @@ class FrameScheduler final {
     void transitionSwapchainImage(vk::ImageLayout newLayout);
     void resetSwapchainTracking();
     void ensureSwapchainHasNotChanged() const;
+    void destroyImageSemaphores() noexcept;
+
+    // 每张交换链图像对应一组信号量：imageAvailable 用于 acquire，renderFinished 用于 present
+    struct ImageSemaphores {
+        VkSemaphore imageAvailable = VK_NULL_HANDLE;
+        VkSemaphore renderFinished = VK_NULL_HANDLE;
+    };
 
     const VulkanContext* context_ = nullptr;
     Swapchain* swapchain_ = nullptr;
     std::vector<std::unique_ptr<FrameContext>> frames_;
     std::vector<VkFence> imageInFlightFences_;
+    std::vector<ImageSemaphores> imageSemaphores_;  // 按 imageIndex 索引
     ImageStateTracker imageStateTracker_;
     VkSwapchainKHR trackedSwapchain_ = VK_NULL_HANDLE;
     uint32_t currentFrameIndex_ = 0;

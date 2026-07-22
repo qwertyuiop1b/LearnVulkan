@@ -26,6 +26,10 @@ FrameScheduler::FrameScheduler(const VulkanContext& context, const FrameSchedule
     resetSwapchainTracking();
 }
 
+FrameScheduler::~FrameScheduler() noexcept {
+    destroyImageSemaphores();
+}
+
 FrameBeginResult FrameScheduler::beginFrame() {
     if (activeFrame_ != nullptr)
         throw std::logic_error("Cannot begin a frame while another frame is in progress");
@@ -34,20 +38,27 @@ FrameBeginResult FrameScheduler::beginFrame() {
     FrameContext& frame = *frames_[currentFrameIndex_];
     frame.waitForCompletion();
 
-    const SwapchainAcquireResult acquisition = swapchain_->acquireNextImage(frame.imageAvailableSemaphore());
+    // 用当前帧的 imageAvailable 信号量触发 acquire
+    // 这个信号量与 frameIndex 绑定，framesInFlight 个帧循环使用
+    // 关键：acquire 完成后立即知道 imageIndex，再用 imageIndex 对应的信号量做后续 submit/present
+    const VkSemaphore acquireSemaphore = imageSemaphores_[currentFrameIndex_].imageAvailable;
+
+    const SwapchainAcquireResult acquisition = swapchain_->acquireNextImage(acquireSemaphore);
     if (acquisition.status == SwapchainStatus::eOutOfDate)
         return {acquisition.status};
     if (acquisition.imageIndex >= imageInFlightFences_.size())
         throw std::runtime_error("Swapchain returned an image index outside the tracked range");
 
-    const VkFence imageFence = imageInFlightFences_[acquisition.imageIndex];
+    currentImageIndex_ = acquisition.imageIndex;
+
+    // 等待该图像上一次渲染完成（防止 write-after-write）
+    const VkFence imageFence = imageInFlightFences_[currentImageIndex_];
     if (imageFence != VK_NULL_HANDLE && imageFence != frame.inFlightFence()) {
         if (vkWaitForFences(static_cast<VkDevice>(context_->device()), 1, &imageFence, VK_TRUE, UINT64_MAX) != VK_SUCCESS)
             throw std::runtime_error("Failed while waiting for a Vulkan swapchain image fence");
     }
 
     frame.beginCommandBuffer();
-    currentImageIndex_ = acquisition.imageIndex;
     activeFrame_ = &frame;
     dynamicRenderingActive_ = false;
     return {acquisition.status, currentImageIndex_, activeFrame_, &swapchain_->renderTarget(currentImageIndex_)};
@@ -123,8 +134,8 @@ SwapchainStatus FrameScheduler::endFrame(VkPipelineStageFlags2 imageAvailableWai
     activeFrame_->endCommandBuffer();
     activeFrame_->resetFence();
 
-    const VkSemaphore imageAvailableSemaphore = activeFrame_->imageAvailableSemaphore();
-    const VkSemaphore renderFinishedSemaphore = activeFrame_->renderFinishedSemaphore();
+    const VkSemaphore imageAvailableSemaphore = imageSemaphores_[currentFrameIndex_].imageAvailable;
+    const VkSemaphore renderFinishedSemaphore = imageSemaphores_[currentImageIndex_].renderFinished;
     const VkCommandBuffer commandBuffer = activeFrame_->commandBuffer();
     VkSemaphoreSubmitInfo waitInfo{};
     waitInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -244,6 +255,34 @@ void FrameScheduler::resetSwapchainTracking() {
     trackedSwapchain_ = swapchain_->nativeHandle();
     imageInFlightFences_.assign(swapchain_->imageCount(), VK_NULL_HANDLE);
     imageStateTracker_ = ImageStateTracker{1, swapchain_->imageCount()};
+
+    // 销毁旧信号量，重建与交换链图像数对应的信号量组
+    destroyImageSemaphores();
+
+    const uint32_t imageCount = swapchain_->imageCount();
+    imageSemaphores_.resize(imageCount);
+    const VkDevice device = static_cast<VkDevice>(context_->device());
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+    for (uint32_t i = 0; i < imageCount; ++i) {
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageSemaphores_[i].imageAvailable) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create imageAvailable semaphore");
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageSemaphores_[i].renderFinished) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create renderFinished semaphore");
+    }
+}
+
+void FrameScheduler::destroyImageSemaphores() noexcept {
+    if (!context_)
+        return;
+    const VkDevice device = static_cast<VkDevice>(context_->device());
+    for (auto& s : imageSemaphores_) {
+        if (s.imageAvailable != VK_NULL_HANDLE)
+            vkDestroySemaphore(device, s.imageAvailable, nullptr);
+        if (s.renderFinished != VK_NULL_HANDLE)
+            vkDestroySemaphore(device, s.renderFinished, nullptr);
+    }
+    imageSemaphores_.clear();
 }
 
 void FrameScheduler::ensureSwapchainHasNotChanged() const {

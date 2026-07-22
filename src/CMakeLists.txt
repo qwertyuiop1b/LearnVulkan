@@ -1,6 +1,11 @@
 add_executable(ch_example chapters/ch_example.cpp)
 target_link_libraries(ch_example PRIVATE vulkan_tutorial_common vulkan_tutorial_assets)
 
+# ─── VkKit Triangle Example ──────────────────────────────────────────────────
+add_executable(vkit_triangle chapters/vkit_triangle.cpp)
+target_link_libraries(vkit_triangle PRIVATE VkKit::VkKit)
+compile_shaders(vkit_triangle)
+
 add_executable(ch00_start chapters/ch00_start.cpp)
 target_link_libraries(ch00_start PRIVATE vulkan_tutorial_common)
 
