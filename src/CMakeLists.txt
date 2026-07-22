@@ -4,6 +4,10 @@ target_link_libraries(ch_example PRIVATE vulkan_tutorial_common vulkan_tutorial_
 add_executable(ch00_start chapters/ch00_start.cpp)
 target_link_libraries(ch00_start PRIVATE vulkan_tutorial_common)
 
+add_executable(a_custom chapters/a_custom.cpp chapters/custom/context.cpp)
+target_include_directories(a_custom PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/chapters/custom)
+target_link_libraries(a_custom PRIVATE vulkan_tutorial_common)
+
 # ─── Chapter 01: Instance + Validation Layers ────────────────────────────────
 add_executable(ch01_instance chapters/ch01_instance.cpp)
 target_link_libraries(ch01_instance PRIVATE vulkan_tutorial_common)
