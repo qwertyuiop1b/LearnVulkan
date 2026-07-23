@@ -348,7 +348,7 @@ class Ch16App {
         recordCommandBuffer(commandBuffers_[currentFrame_], imgIdx);
         VkSemaphore ws[] = {imageAvailableSems_[currentFrame_]};
         VkPipelineStageFlags wst[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-        VkSemaphore ss[] = {renderFinishedSems_[currentFrame_]};
+        VkSemaphore ss[] = {renderFinishedSems_[imgIdx]};
         VkSubmitInfo si{};
         si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
         si.waitSemaphoreCount = 1;
@@ -435,10 +435,9 @@ class Ch16App {
         ci.pApplicationInfo = &ai;
         ci.enabledExtensionCount = static_cast<uint32_t>(exts.size());
         ci.ppEnabledExtensionNames = exts.data();
-#ifdef __APPLE__
+
         enablePortabilityBit(ci);
 
-#endif
         if (ENABLE_VALIDATION_LAYERS) {
             ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
             ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
@@ -493,10 +492,6 @@ class Ch16App {
         ci.pEnabledFeatures = &feat;
         ci.enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size());
         ci.ppEnabledExtensionNames = DEVICE_EXTENSIONS.data();
-        if (ENABLE_VALIDATION_LAYERS) {
-            ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-            ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-        }
         VK_CHECK(vkCreateDevice(physicalDevice_, &ci, nullptr, &device_));
         vkGetDeviceQueue(device_, queueIndices_.graphicsFamily.value(), 0, &graphicsQueue_);
         vkGetDeviceQueue(device_, queueIndices_.presentFamily.value(), 0, &presentQueue_);
@@ -564,7 +559,7 @@ class Ch16App {
     }
     void createSyncObjects() {
         imageAvailableSems_.resize(MAX_FRAMES);
-        renderFinishedSems_.resize(MAX_FRAMES);
+        renderFinishedSems_.resize(swapchainImages_.size());
         inFlightFences_.resize(MAX_FRAMES);
         VkSemaphoreCreateInfo sCI{};
         sCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -573,8 +568,10 @@ class Ch16App {
         fCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
         for (int i = 0; i < MAX_FRAMES; ++i) {
             VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &imageAvailableSems_[i]));
-            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &renderFinishedSems_[i]));
             VK_CHECK(vkCreateFence(device_, &fCI, nullptr, &inFlightFences_[i]));
+        }
+        for (size_t i = 0; i < swapchainImages_.size(); ++i) {
+            VK_CHECK(vkCreateSemaphore(device_, &sCI, nullptr, &renderFinishedSems_[i]));
         }
     }
     void recreateSwapchain() {
@@ -596,8 +593,10 @@ class Ch16App {
         vkFreeMemory(device_, vertexMemory_, nullptr);
         for (int i = 0; i < MAX_FRAMES; ++i) {
             vkDestroySemaphore(device_, imageAvailableSems_[i], nullptr);
-            vkDestroySemaphore(device_, renderFinishedSems_[i], nullptr);
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
+        }
+        for (size_t i = 0; i < swapchainImages_.size(); ++i) {
+            vkDestroySemaphore(device_, renderFinishedSems_[i], nullptr);
         }
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         vkDestroyPipeline(device_, pipeline_, nullptr);

@@ -490,10 +490,6 @@ class Ch20App {
         ci.pEnabledFeatures = &feat;
         ci.enabledExtensionCount = static_cast<uint32_t>(enabledExts.size());
         ci.ppEnabledExtensionNames = enabledExts.data();
-        if (ENABLE_VALIDATION_LAYERS) {
-            ci.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-            ci.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-        }
         VK_CHECK(vkCreateDevice(physicalDevice_, &ci, nullptr, &device_));
         vkGetDeviceQueue(device_, queueIndices_.graphicsFamily.value(), 0, &graphicsQueue_);
         vkGetDeviceQueue(device_, queueIndices_.presentFamily.value(), 0, &presentQueue_);
@@ -1224,6 +1220,21 @@ class Ch20App {
                                pushConstants);
             vkCmdDispatch(cmd, (swapchainExtent_.width + 7) / 8, (swapchainExtent_.height + 7) / 8, 1);
         } else if (fpCmdTraceRays_) {
+            vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtPipeline_);
+            vkCmdBindDescriptorSets(cmd,
+                                    VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+                                    rtPipelineLayout_,
+                                    0,
+                                    1,
+                                    &rtDescSet_,
+                                    0,
+                                    nullptr);
+            vkCmdPushConstants(cmd,
+                               rtPipelineLayout_,
+                               VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                               0,
+                               sizeof(accumFrameCount_),
+                               &accumFrameCount_);
             fpCmdTraceRays_(cmd,
                             &sbtRgen_,
                             &sbtMiss_,
