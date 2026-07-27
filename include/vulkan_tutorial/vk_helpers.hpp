@@ -281,10 +281,6 @@ inline void createLogicalDevice(VkPhysicalDevice physicalDevice,
     if (supportsPresentWait) enabledExtensions.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
     createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = enabledExtensions.data();
-    if (ENABLE_VALIDATION_LAYERS) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(VALIDATION_LAYERS.size());
-        createInfo.ppEnabledLayerNames = VALIDATION_LAYERS.data();
-    }
     VK_CHECK(vkCreateDevice(physicalDevice, &createInfo, nullptr, &device));
     vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);

@@ -98,6 +98,11 @@ add_executable(ch18_shadow chapters/ch18_shadow.cpp)
 target_link_libraries(ch18_shadow PRIVATE vulkan_tutorial_common)
 compile_shaders(ch18_shadow)
 
+# Chapter 18b: Stencil Shadow Volumes
+add_executable(ch18_shadow_volume chapters/ch18_shadow_volume.cpp)
+target_link_libraries(ch18_shadow_volume PRIVATE vulkan_tutorial_common)
+compile_shaders(ch18_shadow_volume)
+
 # ─── Chapter 19: Deferred Rendering (G-Buffer) ───────────────────────────────
 add_executable(ch19_deferred chapters/ch19_deferred.cpp)
 target_link_libraries(ch19_deferred PRIVATE vulkan_tutorial_common)
