@@ -27,6 +27,7 @@
 | --- | --- |
 | Vulkan SDK / loader | Vulkan 头文件、loader 与设备 API |
 | GLFW 3.3+ | 创建 window surface |
+| GLM | Camera、Orbit/FPS controller 的向量、四元数与矩阵运算 |
 | Vulkan Memory Allocator (VMA) | `Buffer` 和 `Image` 的内存分配 |
 
 VMA 以头文件方式使用。作为本仓库的子目录构建时，CMake 默认使用
@@ -82,6 +83,7 @@ include/graphics/                  # 公开头文件
 ├── render/                        # Swapchain、RenderTarget、FrameScheduler
 ├── command/                       # CommandPool、FrameContext 与同步对象
 ├── resource/                      # UploadContext；后续扩展 Mesh/Material/Asset
+├── scene/                         # Camera、Orbit/FPS camera controller
 └── utils/                         # 错误、格式转换、命名和诊断工具预留
 
 src/graphics/                      # 与公开模块对应的实现
@@ -284,6 +286,17 @@ inFlightFence:           graphics queue submit → CPU 等待后复用本帧 com
 
 `FrameScheduler` 额外维护 `imageInFlightFences_` 与每张 swapchain image 的 `ImageStateTracker` 状态，所以当 swapchain image 数多于或少于 frames-in-flight 数时，仍不会把同一 image 同时交给多个 GPU submission 写入。提交与 layout barrier 使用 `VkSubmitInfo2`、`VkImageMemoryBarrier2` 和 `vkCmdPipelineBarrier2`。
 
+### 8. Camera 与控制器
+
+| 类型 | 作用 | 关键点 |
+| --- | --- | --- |
+| `Camera` | 保存观察姿态和透视投影参数 | 右手系、Y 向上、默认看向 -Z、Vulkan `[0, 1]` 深度 |
+| `CameraMatrices` | 一次取得全部常用矩阵 | view、projection、view-projection 及其逆矩阵 |
+| `OrbitCameraController` | 围绕目标点旋转、平移和缩放 | 适合模型查看器和编辑器视口 |
+| `FpsCameraController` | 鼠标观察、水平移动、升降和冲刺 | 适合第一人称场景漫游 |
+
+控制器不直接读取 GLFW。应用把键鼠状态转换为 `OrbitCameraInput` 或 `FpsCameraInput`，因此 Camera 模块可以独立测试，也可以接入其他窗口和输入库。像素增量遵循窗口坐标：X 向右为正、Y 向下为正；移动方向使用 X=右、Y=上、Z=前。
+
 ## 典型用法
 
 以下示例展示最小的初始化、pipeline 创建和一帧绘制结构。错误处理策略由应用决定，这里用异常直接向上传播。
@@ -329,6 +342,45 @@ pipelineInfo.shaderStages = {
 };
 pipelineInfo.colorAttachmentFormats = {swapchain.format()};
 GraphicsPipeline pipeline{context, pipelineInfo};
+```
+
+FPS 相机的最小更新代码如下。`moveDirection` 会自动归一化，因此斜向移动不会更快：
+
+```cpp
+#include <graphics/scene/camera.hpp>
+#include <graphics/scene/camera_controller.hpp>
+
+Camera camera;
+camera.setPerspective(glm::radians(60.0f), framebufferAspect, 0.1f, 500.0f);
+
+FpsCameraController fps{camera};
+
+FpsCameraInput input;
+input.lookDeltaPixels = mouseDelta;
+input.moveDirection = {
+    float(moveRight) - float(moveLeft),
+    float(moveUp) - float(moveDown),
+    float(moveForward) - float(moveBackward),
+};
+input.sprint = sprintPressed;
+fps.update(input, deltaSeconds);
+
+const CameraMatrices cameraMatrices = camera.matrices();
+cameraUniformBuffer.write(&cameraMatrices, sizeof(cameraMatrices));
+```
+
+轨道相机使用同一个 `Camera`：
+
+```cpp
+OrbitCameraController orbit{camera};
+orbit.setTarget({0.0f, 1.0f, 0.0f});
+orbit.setDistance(6.0f);
+
+OrbitCameraInput input;
+input.rotateDeltaPixels = leftMouseDrag;
+input.panDeltaPixels = rightMouseDrag;
+input.zoomDelta = scrollDelta;
+orbit.update(input, deltaSeconds);
 ```
 
 ## 逐帧渲染流程
@@ -383,6 +435,7 @@ void drawFrame(FrameScheduler& scheduler,
 `VkKit` 已覆盖基础 Vulkan 资源与帧循环，但以下能力尚未封装：
 
 - GLFW window 生命周期、事件循环和 framebuffer-size 回调。
+- GLFW 键鼠状态到 Camera controller 输入的映射。
 - SPIR-V 编译、shader reflection、自动生成 descriptor/pipeline layout。
 - descriptor indexing、bindless descriptor、push descriptor。
 - graphics pipeline cache、pipeline library、compute pipeline、ray tracing pipeline。

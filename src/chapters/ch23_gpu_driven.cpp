@@ -394,7 +394,7 @@ class Ch23App {
     }
 
     void createScenePipeline() {
-        VkShaderModule vert = createShaderModuleFromFile(device_, "uniform3d.vert.spv");
+        VkShaderModule vert = createShaderModuleFromFile(device_, "gpu_cull_scene.vert.spv");
         VkShaderModule frag = createShaderModuleFromFile(device_, "triangle.frag.spv");
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,

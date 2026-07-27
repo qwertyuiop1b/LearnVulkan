@@ -41,7 +41,6 @@
 #include <vulkan_tutorial/utils.hpp>
 
 #include <array>
-#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <set>

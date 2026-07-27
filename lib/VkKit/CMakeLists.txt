@@ -2,7 +2,13 @@ cmake_minimum_required(VERSION 3.20)
 
 project(VkKit VERSION 0.1.0 LANGUAGES CXX)
 
+include(CTest)
+
 find_package(Vulkan REQUIRED)
+
+if(NOT TARGET glm::glm)
+    find_package(glm CONFIG REQUIRED)
+endif()
 
 find_path(VKKIT_VMA_INCLUDE_DIR
     NAMES vk_mem_alloc.h
@@ -50,6 +56,8 @@ add_library(VkKit
     src/graphics/command/command_pool.cpp
     src/graphics/command/frame_context.cpp
     src/graphics/resource/upload_context.cpp
+    src/graphics/scene/camera.cpp
+    src/graphics/scene/camera_controller.cpp
     src/vma_impl.cpp)
 add_library(VkKit::VkKit ALIAS VkKit)
 
@@ -61,10 +69,18 @@ target_compile_features(VkKit PUBLIC cxx_std_17)
 target_compile_definitions(VkKit PRIVATE GLFW_INCLUDE_NONE)
 target_link_libraries(VkKit PUBLIC
     Vulkan::Vulkan
+    glm::glm
     $<BUILD_INTERFACE:VkKitVma>
     $<BUILD_INTERFACE:${VKKIT_GLFW_TARGET}>
     $<INSTALL_INTERFACE:VkKit::Vma>
     $<INSTALL_INTERFACE:VkKit::Glfw>)
+
+option(VKKIT_BUILD_TESTS "Build VkKit tests" ${BUILD_TESTING})
+if(VKKIT_BUILD_TESTS)
+    add_executable(vkkit_camera_tests tests/camera_tests.cpp)
+    target_link_libraries(vkkit_camera_tests PRIVATE VkKit::VkKit)
+    add_test(NAME vkkit_camera COMMAND vkkit_camera_tests)
+endif()
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(VKKIT_INSTALL_DEFAULT ON)

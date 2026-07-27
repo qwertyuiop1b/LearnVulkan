@@ -3,6 +3,7 @@
 include(CMakeFindDependencyMacro)
 find_dependency(Vulkan REQUIRED)
 find_dependency(glfw3 3.3 CONFIG REQUIRED)
+find_dependency(glm CONFIG REQUIRED)
 
 find_path(VKKIT_VMA_INCLUDE_DIR
     NAMES vk_mem_alloc.h
