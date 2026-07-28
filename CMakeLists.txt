@@ -37,3 +37,14 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     ${CMAKE_SOURCE_DIR}/shaders
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/shaders
 )
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(vk-utils-tests tests/vk_utils_tests.cpp)
+    target_include_directories(vk-utils-tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${Vulkan_INCLUDE_DIRS}
+    )
+    target_link_libraries(vk-utils-tests PRIVATE Vulkan::Vulkan)
+    add_test(NAME vk-utils-tests COMMAND vk-utils-tests)
+endif()

@@ -1,7 +1,13 @@
 #pragma once
 
-namespace vk_engine {
-class VkEngine {
+#include "vk_context.h"
+#include "vk_window.h"
+#include <memory>
+
+namespace vk_engine
+{
+class VkEngine
+{
 public:
     VkEngine();
     ~VkEngine();
@@ -9,6 +15,7 @@ public:
     void Run();
 
 private:
-
+    std::unique_ptr<VkWindow> window{nullptr};
+    std::unique_ptr<VkContext> context{nullptr};
 };
-}
+} // namespace vk_engine
