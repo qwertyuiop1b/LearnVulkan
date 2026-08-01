@@ -1,14 +1,26 @@
 #include "vk_context.h"
 #include <stdexcept>
+#include <iostream>
 #include <vulkan/vulkan_raii.hpp>
 #include <vulkan/vulkan_core.h>
 #include <VkBootstrap.h>
 
-#include "vk_window.h"
 #include "vk_utils.h"
+#include "vk_window.h"
 
 namespace vk_engine
 {
+
+static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT,
+                                                    VkDebugUtilsMessageTypeFlagsEXT,
+                                                    VkDebugUtilsMessengerCallbackDataEXT const* callbackData,
+                                                    void*)
+{
+
+    std::cerr << "[validation]: " << callbackData->pMessage << '\n';
+    return VK_FALSE;
+}
+
 VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
 {
     vkb::InstanceBuilder builder;
@@ -39,8 +51,11 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     VK_CHECK(glfwCreateWindowSurface(vkbInstance.instance, &vkWindow.GetWindow(), nullptr, &rawSurface));
     surface = vk::raii::SurfaceKHR(instance, rawSurface);
 
+    VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+    features13.dynamicRendering = VK_TRUE;
+
     vkb::PhysicalDeviceSelector selector{vkbInstance};
-    const auto phyRet = selector.set_surface(*surface).select();
+    const auto phyRet = selector.set_surface(*surface).add_required_extension_features(features13).select();
     if (!phyRet)
     {
         throw std::runtime_error("failed to select physical");
@@ -60,6 +75,11 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     // device
     vkb::Device vkbDevice = deviceRet.value();
     device = vk::raii::Device(physicalDevice, vkbDevice.device);
+
+    graphicQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+    presentQueueIndex = vkbDevice.get_queue_index(vkb::QueueType::present).value();
+    graphicQueue = vk::raii::Queue(device, graphicQueueIndex, 0);
+    presentQueue = vk::raii::Queue(device, presentQueueIndex, 0);
 
     // cleanup vkbooststrap
     vkbInstance.instance = VK_NULL_HANDLE;

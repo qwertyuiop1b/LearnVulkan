@@ -21,16 +21,6 @@ inline void CheckVkResult(VkResult result, const char* expression, std::source_l
 }
 } // namespace vk_engine::detail
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT,
-                                                    VkDebugUtilsMessageTypeFlagsEXT,
-                                                    VkDebugUtilsMessengerCallbackDataEXT const* callbackData,
-                                                    void*)
-{
-
-    std::cerr << "[validation]: " << callbackData->pMessage << '\n';
-    return VK_FALSE;
-}
-
 #define VK_CHECK(call)                                                                                                 \
     do                                                                                                                 \
     {                                                                                                                  \

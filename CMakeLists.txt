@@ -44,6 +44,7 @@ if(BUILD_TESTING)
     target_include_directories(vk-utils-tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${Vulkan_INCLUDE_DIRS}
+        ${CMAKE_CURRENT_SOURCE_DIR}/external/glfw/include
     )
     target_link_libraries(vk-utils-tests PRIVATE Vulkan::Vulkan)
     add_test(NAME vk-utils-tests COMMAND vk-utils-tests)
