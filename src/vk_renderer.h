@@ -11,6 +11,14 @@
 
 namespace vk_engine
 {
+struct RenderTarget
+{
+    vk::Image image;
+    vk::ImageView imageView;
+    vk::Extent2D extent;
+    vk::Format colorFormat;
+};
+
 class VkFrameContext
 {
 public:
@@ -32,10 +40,7 @@ public:
 class VkRenderer
 {
 public:
-    using RecordCallback = std::function<void(vk::CommandBuffer commandBuffer,
-                                              vk::Image swapchainImage,
-                                              vk::ImageView swapchainImageView,
-                                              vk::Extent2D extent)>;
+    using RecordCallback = std::function<void(vk::CommandBuffer commandBuffer, const RenderTarget& target)>;
 
     VkRenderer(const VkContext& context, VkSwapchain& swapchain);
     ~VkRenderer() noexcept;

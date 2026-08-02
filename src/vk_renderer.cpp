@@ -87,7 +87,11 @@ void VkRenderer::DrawFrame(const RecordCallback& record)
     TransitionToColorAttachment(commandBuffer, swapchain.GetImage(imageIndex), imageLayouts[imageIndex]);
     imageLayouts[imageIndex] = vk::ImageLayout::eColorAttachmentOptimal;
 
-    record(commandBuffer, swapchain.GetImage(imageIndex), swapchain.GetImageView(imageIndex), swapchain.GetExtent());
+    const RenderTarget renderTarget{swapchain.GetImage(imageIndex),
+                                    swapchain.GetImageView(imageIndex),
+                                    swapchain.GetExtent(),
+                                    swapchain.GetImageFormat()};
+    record(commandBuffer, renderTarget);
 
     TransitionToPresent(commandBuffer, swapchain.GetImage(imageIndex));
     imageLayouts[imageIndex] = vk::ImageLayout::ePresentSrcKHR;

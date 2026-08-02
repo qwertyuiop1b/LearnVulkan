@@ -1,10 +1,17 @@
 #include "vk_utils.h"
+#include "vk_buffer.h"
+#include "vk_pipeline.h"
 #include "vk_renderer.h"
+#include "vk_shader.h"
 #include "vk_swapchain.h"
+#include "vk_vertex.h"
 
 #include <cassert>
 #include <concepts>
+#include <cstddef>
 #include <functional>
+#include <fstream>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -26,8 +33,76 @@ int main()
     static_assert(!std::is_move_constructible_v<vk_engine::VkRenderer>);
     static_assert(!std::is_move_assignable_v<vk_engine::VkRenderer>);
 
-    using ExpectedRecordCallback = std::function<void(vk::CommandBuffer, vk::Image, vk::ImageView, vk::Extent2D)>;
+    using ExpectedRecordCallback = std::function<void(vk::CommandBuffer, const vk_engine::RenderTarget&)>;
     static_assert(std::same_as<vk_engine::VkRenderer::RecordCallback, ExpectedRecordCallback>);
+
+    static_assert(!std::is_copy_constructible_v<vk_engine::VkBuffer>);
+    static_assert(!std::is_copy_assignable_v<vk_engine::VkBuffer>);
+    static_assert(!std::is_copy_constructible_v<vk_engine::ShaderModule>);
+    static_assert(!std::is_copy_assignable_v<vk_engine::ShaderModule>);
+    static_assert(!std::is_copy_constructible_v<vk_engine::GraphicsPipeline>);
+    static_assert(!std::is_copy_assignable_v<vk_engine::GraphicsPipeline>);
+
+    const vk_engine::VertexInputDescription vertexInput = vk_engine::Vertex::GetInputDescription();
+    assert(vertexInput.bindings.size() == 1);
+    assert(vertexInput.attributes.size() == 2);
+    assert(vertexInput.bindings.front().binding == 0);
+    assert(vertexInput.bindings.front().stride == sizeof(vk_engine::Vertex));
+    assert(vertexInput.attributes[0].location == 0);
+    assert(vertexInput.attributes[0].format == vk::Format::eR32G32Sfloat);
+    assert(vertexInput.attributes[0].offset == offsetof(vk_engine::Vertex, position));
+    assert(vertexInput.attributes[1].location == 1);
+    assert(vertexInput.attributes[1].format == vk::Format::eR32G32B32Sfloat);
+    assert(vertexInput.attributes[1].offset == offsetof(vk_engine::Vertex, color));
+
+    const vk_engine::GraphicsPipelineDescription pipelineDescription{};
+    assert(pipelineDescription.topology == vk::PrimitiveTopology::eTriangleList);
+    assert(pipelineDescription.polygonMode == vk::PolygonMode::eFill);
+    assert(pipelineDescription.cullMode == vk::CullModeFlags{});
+    assert(pipelineDescription.samples == vk::SampleCountFlagBits::e1);
+    assert(!pipelineDescription.depthTestEnable);
+    assert(!pipelineDescription.depthWriteEnable);
+    assert(!pipelineDescription.blendEnable);
+
+    const std::filesystem::path shaderTestDirectory =
+        std::filesystem::temp_directory_path() / "learnvulkan_shader_tests";
+    std::filesystem::create_directories(shaderTestDirectory);
+    const auto emptyShaderPath = shaderTestDirectory / "empty.spv";
+    const auto malformedShaderPath = shaderTestDirectory / "malformed.spv";
+    const auto invalidMagicShaderPath = shaderTestDirectory / "invalid-magic.spv";
+    const auto validShaderPath = shaderTestDirectory / "valid.spv";
+    std::ofstream(emptyShaderPath, std::ios::binary).close();
+    std::ofstream malformedShader(malformedShaderPath, std::ios::binary);
+    malformedShader.put('\x01');
+    malformedShader.close();
+    const uint32_t invalidMagic = 0x01020304U;
+    std::ofstream invalidMagicShader(invalidMagicShaderPath, std::ios::binary);
+    invalidMagicShader.write(reinterpret_cast<const char*>(&invalidMagic), sizeof(invalidMagic));
+    invalidMagicShader.close();
+    const std::array<uint32_t, 5> validCode{0x07230203U, 0x00010000U, 0U, 0U, 0U};
+    std::ofstream validShader(validShaderPath, std::ios::binary);
+    validShader.write(reinterpret_cast<const char*>(validCode.data()),
+                      static_cast<std::streamsize>(validCode.size() * sizeof(uint32_t)));
+    validShader.close();
+
+    const auto expectShaderError = [](const std::filesystem::path& path)
+    {
+        try
+        {
+            (void)vk_engine::ReadSpirvFile(path);
+            assert(false && "invalid SPIR-V input must throw");
+        }
+        catch (const std::runtime_error& error)
+        {
+            assert(std::string{error.what()}.find(path.string()) != std::string::npos);
+        }
+    };
+    expectShaderError(emptyShaderPath);
+    expectShaderError(malformedShaderPath);
+    expectShaderError(invalidMagicShaderPath);
+    const std::vector<uint32_t> expectedCode(validCode.begin(), validCode.end());
+    assert(vk_engine::ReadSpirvFile(validShaderPath) == expectedCode);
+    std::filesystem::remove_all(shaderTestDirectory);
 
     int invocationCount = 0;
     VK_CHECK((
