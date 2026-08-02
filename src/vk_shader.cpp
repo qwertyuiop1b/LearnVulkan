@@ -9,20 +9,6 @@ namespace
 {
 constexpr uint32_t kSpirvMagic = 0x07230203U;
 
-std::filesystem::path ResolveShaderPath(const std::filesystem::path& path)
-{
-    if (path.is_absolute())
-    {
-        return path;
-    }
-
-#ifdef VK_ENGINE_SHADER_DIR
-    return std::filesystem::path{VK_ENGINE_SHADER_DIR} / path;
-#else
-    return std::filesystem::path{"shaders"} / path;
-#endif
-}
-
 [[noreturn]] void ThrowShaderFileError(const std::filesystem::path& path, const char* reason)
 {
     throw std::runtime_error("failed to load SPIR-V '" + path.string() + "': " + reason);
@@ -67,8 +53,7 @@ std::vector<uint32_t> ReadSpirvFile(const std::filesystem::path& path)
 
 ShaderModule::ShaderModule(const vk::raii::Device& device, const std::filesystem::path& path)
 {
-    const std::filesystem::path resolvedPath = ResolveShaderPath(path);
-    const std::vector<uint32_t> code = ReadSpirvFile(resolvedPath);
+    const std::vector<uint32_t> code = ReadSpirvFile(path);
 
     vk::ShaderModuleCreateInfo createInfo{};
     createInfo.setCode(code);

@@ -1,12 +1,11 @@
 #pragma once
 
 #include "vk_context.h"
-#include "vk_buffer.h"
-#include "vk_pipeline.h"
 #include "vk_renderer.h"
 #include "vk_swapchain.h"
-#include "vk_vertex.h"
 #include "vk_window.h"
+
+#include <cstdint>
 #include <memory>
 
 namespace vk_engine
@@ -14,17 +13,26 @@ namespace vk_engine
 class VkEngine
 {
 public:
-    VkEngine();
+    explicit VkEngine(uint32_t width = 800, uint32_t height = 600);
     ~VkEngine();
 
-    void Run();
+    void Run(const VkRenderer::RecordCallback& record);
+    void WaitIdle() const;
+
+    const VkContext& GetContext() const noexcept
+    {
+        return *context;
+    }
+
+    const VkSwapchain& GetSwapchain() const noexcept
+    {
+        return *swapchain;
+    }
 
 private:
     std::unique_ptr<VkWindow> window{nullptr};
     std::unique_ptr<VkContext> context{nullptr};
     std::unique_ptr<VkSwapchain> swapchain{nullptr};
-    std::unique_ptr<VkBuffer> triangleVertexBuffer{nullptr};
-    std::unique_ptr<GraphicsPipeline> graphicsPipeline{nullptr};
     std::unique_ptr<VkRenderer> renderer{nullptr};
 };
 } // namespace vk_engine

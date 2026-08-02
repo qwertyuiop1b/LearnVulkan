@@ -1,14 +1,13 @@
 #include "vk_utils.h"
 #include "vk_buffer.h"
+#include "vk_engine.h"
 #include "vk_pipeline.h"
 #include "vk_renderer.h"
 #include "vk_shader.h"
 #include "vk_swapchain.h"
-#include "vk_vertex.h"
 
 #include <cassert>
 #include <concepts>
-#include <cstddef>
 #include <functional>
 #include <fstream>
 #include <filesystem>
@@ -35,6 +34,8 @@ int main()
 
     using ExpectedRecordCallback = std::function<void(vk::CommandBuffer, const vk_engine::RenderTarget&)>;
     static_assert(std::same_as<vk_engine::VkRenderer::RecordCallback, ExpectedRecordCallback>);
+    using ExpectedEngineRun = void (vk_engine::VkEngine::*)(const vk_engine::VkRenderer::RecordCallback&);
+    static_assert(std::same_as<decltype(&vk_engine::VkEngine::Run), ExpectedEngineRun>);
 
     static_assert(!std::is_copy_constructible_v<vk_engine::VkBuffer>);
     static_assert(!std::is_copy_assignable_v<vk_engine::VkBuffer>);
@@ -43,19 +44,9 @@ int main()
     static_assert(!std::is_copy_constructible_v<vk_engine::GraphicsPipeline>);
     static_assert(!std::is_copy_assignable_v<vk_engine::GraphicsPipeline>);
 
-    const vk_engine::VertexInputDescription vertexInput = vk_engine::Vertex::GetInputDescription();
-    assert(vertexInput.bindings.size() == 1);
-    assert(vertexInput.attributes.size() == 2);
-    assert(vertexInput.bindings.front().binding == 0);
-    assert(vertexInput.bindings.front().stride == sizeof(vk_engine::Vertex));
-    assert(vertexInput.attributes[0].location == 0);
-    assert(vertexInput.attributes[0].format == vk::Format::eR32G32Sfloat);
-    assert(vertexInput.attributes[0].offset == offsetof(vk_engine::Vertex, position));
-    assert(vertexInput.attributes[1].location == 1);
-    assert(vertexInput.attributes[1].format == vk::Format::eR32G32B32Sfloat);
-    assert(vertexInput.attributes[1].offset == offsetof(vk_engine::Vertex, color));
-
     const vk_engine::GraphicsPipelineDescription pipelineDescription{};
+    assert(pipelineDescription.vertexShader.empty());
+    assert(pipelineDescription.fragmentShader.empty());
     assert(pipelineDescription.topology == vk::PrimitiveTopology::eTriangleList);
     assert(pipelineDescription.polygonMode == vk::PolygonMode::eFill);
     assert(pipelineDescription.cullMode == vk::CullModeFlags{});

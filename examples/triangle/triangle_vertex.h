@@ -6,16 +6,16 @@
 
 #include <glm/glm.hpp>
 
-namespace vk_engine
+namespace triangle_example
 {
 struct Vertex
 {
     glm::vec2 position;
     glm::vec3 color;
 
-    static VertexInputDescription GetInputDescription()
+    static vk_engine::VertexInputDescription GetInputDescription()
     {
-        VertexInputDescription description;
+        vk_engine::VertexInputDescription description;
 
         vk::VertexInputBindingDescription binding{};
         binding.setBinding(0).setStride(sizeof(Vertex)).setInputRate(vk::VertexInputRate::eVertex);
@@ -38,4 +38,4 @@ struct Vertex
         return description;
     }
 };
-} // namespace vk_engine
+} // namespace triangle_example

@@ -23,8 +23,8 @@ struct PipelineLayoutDescription
 
 struct GraphicsPipelineDescription
 {
-    std::filesystem::path vertexShader{"simple.vert.spv"};
-    std::filesystem::path fragmentShader{"simple.frag.spv"};
+    std::filesystem::path vertexShader;
+    std::filesystem::path fragmentShader;
     VertexInputDescription vertexInput;
     PipelineLayoutDescription pipelineLayout;
     vk::PrimitiveTopology topology{vk::PrimitiveTopology::eTriangleList};
