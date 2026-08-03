@@ -31,11 +31,41 @@ target_include_directories(
     external/glm
     external/vk-booststrap/
 )
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/external/stb)
 target_link_libraries(${PROJECT_NAME} PUBLIC glfw Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
 
 if(VK_ENGINE_BUILD_EXAMPLES)
     find_program(GLSLC_EXECUTABLE NAMES glslc REQUIRED)
+
+    set(TEXTURE_SHADER_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples/texture/shaders/texture.vert
+        ${CMAKE_CURRENT_SOURCE_DIR}/examples/texture/shaders/texture.frag
+    )
+    set(TEXTURE_SHADER_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/examples/texture/shaders)
+    set(TEXTURE_SHADER_BINARIES)
+    foreach(SHADER_SOURCE IN LISTS TEXTURE_SHADER_SOURCES)
+        get_filename_component(SHADER_NAME ${SHADER_SOURCE} NAME)
+        set(SHADER_BINARY ${TEXTURE_SHADER_OUTPUT_DIR}/${SHADER_NAME}.spv)
+        add_custom_command(
+            OUTPUT ${SHADER_BINARY}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${TEXTURE_SHADER_OUTPUT_DIR}
+            COMMAND ${GLSLC_EXECUTABLE} ${SHADER_SOURCE} -o ${SHADER_BINARY}
+            DEPENDS ${SHADER_SOURCE}
+            VERBATIM
+        )
+        list(APPEND TEXTURE_SHADER_BINARIES ${SHADER_BINARY})
+    endforeach()
+    add_custom_target(vk-engine-texture-shaders DEPENDS ${TEXTURE_SHADER_BINARIES})
+
+    add_executable(vk-engine-texture examples/texture/main.cpp examples/texture/texture_vertex.h)
+    add_dependencies(vk-engine-texture vk-engine-texture-shaders)
+    target_compile_definitions(vk-engine-texture PRIVATE
+        VK_ENGINE_TEXTURE_SHADER_DIR="${TEXTURE_SHADER_OUTPUT_DIR}"
+        VK_ENGINE_TEXTURE_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/examples/texture/assets"
+    )
+    target_include_directories(vk-engine-texture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples/texture)
+    target_link_libraries(vk-engine-texture PRIVATE ${PROJECT_NAME})
+
 
     set(TRIANGLE_SHADER_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle/shaders/simple.vert
@@ -82,6 +112,11 @@ if(BUILD_TESTING)
     add_test(NAME vk-utils-tests COMMAND vk-utils-tests)
 
     if(VK_ENGINE_BUILD_EXAMPLES)
+        add_executable(vk-texture-tests tests/texture_vertex_tests.cpp)
+        target_include_directories(vk-texture-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples/texture)
+        target_link_libraries(vk-texture-tests PRIVATE ${PROJECT_NAME})
+        add_test(NAME vk-texture-tests COMMAND vk-texture-tests)
+
         add_executable(vk-triangle-tests tests/triangle_vertex_tests.cpp)
         target_include_directories(vk-triangle-tests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle
