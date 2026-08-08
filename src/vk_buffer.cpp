@@ -1,5 +1,7 @@
 #include "vk_buffer.h"
 
+#include "vk_utils.h"
+
 #include <cstring>
 #include <stdexcept>
 
@@ -7,27 +9,24 @@ namespace vk_engine
 {
 namespace
 {
-uint32_t FindMemoryType(const VkContext& context, uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+VmaAllocationCreateInfo BuildAllocationCreateInfo(vk::MemoryPropertyFlags memoryProperties)
 {
-    const vk::PhysicalDeviceMemoryProperties memoryProperties = context.GetPhysicalDevice().getMemoryProperties();
-    for (uint32_t index = 0; index < memoryProperties.memoryTypeCount; ++index)
+    VmaAllocationCreateInfo allocationCreateInfo{};
+    allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(memoryProperties);
+    if (memoryProperties & vk::MemoryPropertyFlagBits::eHostVisible)
     {
-        const bool typeSupported = (typeFilter & (1U << index)) != 0;
-        const bool propertiesSupported = (memoryProperties.memoryTypes[index].propertyFlags & properties) == properties;
-        if (typeSupported && propertiesSupported)
-        {
-            return index;
-        }
+        allocationCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+                                     VMA_ALLOCATION_CREATE_MAPPED_BIT;
     }
-
-    throw std::runtime_error("failed to find a compatible Vulkan memory type");
+    return allocationCreateInfo;
 }
 } // namespace
 
-VkBuffer::VkBuffer(const VkContext& inContext,
-                   vk::DeviceSize inSize,
-                   vk::BufferUsageFlags usage,
-                   vk::MemoryPropertyFlags memoryProperties)
+Buffer::Buffer(const VkContext& inContext,
+               vk::DeviceSize inSize,
+               vk::BufferUsageFlags usage,
+               vk::MemoryPropertyFlags memoryProperties)
     : context(inContext), size(inSize)
 {
     if (size == 0)
@@ -35,20 +34,26 @@ VkBuffer::VkBuffer(const VkContext& inContext,
         throw std::invalid_argument("Vulkan buffer size must be greater than zero");
     }
 
-    vk::BufferCreateInfo bufferCreateInfo{};
-    bufferCreateInfo.setSize(size).setUsage(usage).setSharingMode(vk::SharingMode::eExclusive);
-    buffer = vk::raii::Buffer(context.GetDevice(), bufferCreateInfo);
+    VkBufferCreateInfo bufferCreateInfo{};
+    bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferCreateInfo.size = size;
+    bufferCreateInfo.usage = static_cast<VkBufferUsageFlags>(usage);
+    bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    const vk::MemoryRequirements requirements = buffer.getMemoryRequirements();
-    const uint32_t memoryTypeIndex = FindMemoryType(context, requirements.memoryTypeBits, memoryProperties);
-
-    vk::MemoryAllocateInfo allocateInfo{};
-    allocateInfo.setAllocationSize(requirements.size).setMemoryTypeIndex(memoryTypeIndex);
-    memory = vk::raii::DeviceMemory(context.GetDevice(), allocateInfo);
-    buffer.bindMemory(*memory, 0);
+    const VmaAllocationCreateInfo allocationCreateInfo = BuildAllocationCreateInfo(memoryProperties);
+    VK_CHECK(vmaCreateBuffer(context.GetAllocator(), &bufferCreateInfo, &allocationCreateInfo, &buffer, &allocation,
+                             nullptr));
 }
 
-void VkBuffer::Write(std::span<const std::byte> data)
+Buffer::~Buffer()
+{
+    if (allocation != nullptr)
+    {
+        vmaDestroyBuffer(context.GetAllocator(), buffer, allocation);
+    }
+}
+
+void Buffer::Write(std::span<const std::byte> data)
 {
     if (data.size_bytes() > size)
     {
@@ -59,8 +64,9 @@ void VkBuffer::Write(std::span<const std::byte> data)
         return;
     }
 
-    void* mapped = memory.mapMemory(0, data.size_bytes());
+    void* mapped = nullptr;
+    VK_CHECK(vmaMapMemory(context.GetAllocator(), allocation, &mapped));
     std::memcpy(mapped, data.data(), data.size_bytes());
-    memory.unmapMemory();
+    vmaUnmapMemory(context.GetAllocator(), allocation);
 }
 } // namespace vk_engine

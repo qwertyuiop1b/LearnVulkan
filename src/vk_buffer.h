@@ -9,31 +9,31 @@
 
 namespace vk_engine
 {
-class VkBuffer
+class Buffer
 {
 public:
-    VkBuffer(const VkContext& context,
-             vk::DeviceSize size,
-             vk::BufferUsageFlags usage,
-             vk::MemoryPropertyFlags memoryProperties);
-    ~VkBuffer() = default;
+    Buffer(const VkContext& context,
+           vk::DeviceSize size,
+           vk::BufferUsageFlags usage,
+           vk::MemoryPropertyFlags memoryProperties);
+    ~Buffer();
 
-    VkBuffer(const VkBuffer&) = delete;
-    VkBuffer& operator=(const VkBuffer&) = delete;
-    VkBuffer(VkBuffer&&) = delete;
-    VkBuffer& operator=(VkBuffer&&) = delete;
+    Buffer(const Buffer&) = delete;
+    Buffer& operator=(const Buffer&) = delete;
+    Buffer(Buffer&&) = delete;
+    Buffer& operator=(Buffer&&) = delete;
 
     void Write(std::span<const std::byte> data);
 
     vk::Buffer GetHandle() const noexcept
     {
-        return *buffer;
+        return buffer;
     }
 
 private:
     const VkContext& context;
-    vk::raii::DeviceMemory memory{nullptr};
-    vk::raii::Buffer buffer{nullptr};
+    VkBuffer buffer{VK_NULL_HANDLE};
+    VmaAllocation allocation{nullptr};
     vk::DeviceSize size{};
 };
 } // namespace vk_engine

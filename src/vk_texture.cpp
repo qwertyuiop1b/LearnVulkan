@@ -15,7 +15,7 @@ VkTexture::VkTexture(const VkContext& inContext, const std::filesystem::path& pa
         throw std::runtime_error("failed to load texture: " + path.string());
     const std::size_t byteCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4;
     const std::span<const std::byte> pixels{reinterpret_cast<const std::byte*>(loaded), byteCount};
-    image = VkImage2D(context, vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)}, pixels);
+    image = Image(context, vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)}, pixels);
     stbi_image_free(loaded);
     vk::SamplerCreateInfo samplerInfo{};
     samplerInfo.setMagFilter(vk::Filter::eLinear)

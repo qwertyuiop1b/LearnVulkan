@@ -20,6 +20,9 @@ add_subdirectory(external/glfw)
 # glm
 add_subdirectory(external/glm)
 
+# vma
+add_subdirectory(external/VulkanMemoryAllocator)
+
 
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h src/*.hpp)
 
@@ -30,6 +33,7 @@ target_include_directories(
     external/glfw/include
     external/glm
     external/vk-booststrap/
+    external/VulkanMemoryAllocator/include
 )
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/external/stb)
 target_link_libraries(${PROJECT_NAME} PUBLIC glfw Vulkan::Vulkan vk-bootstrap::vk-bootstrap)

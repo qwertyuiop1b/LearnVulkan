@@ -30,7 +30,7 @@ int main()
         triangle_example::Vertex{glm::vec2{0.0F, -0.5F}, glm::vec3{1.0F, 0.0F, 0.0F}},
         triangle_example::Vertex{glm::vec2{0.5F, 0.5F}, glm::vec3{0.0F, 1.0F, 0.0F}},
         triangle_example::Vertex{glm::vec2{-0.5F, 0.5F}, glm::vec3{0.0F, 0.0F, 1.0F}}};
-    vk_engine::VkBuffer vertexBuffer(engine.GetContext(),
+    vk_engine::Buffer vertexBuffer(engine.GetContext(),
                                      sizeof(vertices),
                                      vk::BufferUsageFlagBits::eVertexBuffer,
                                      vk::MemoryPropertyFlagBits::eHostVisible |

@@ -1,22 +1,14 @@
 #include "vk_image.h"
 
+#include "vk_utils.h"
+
 #include <stdexcept>
+#include <utility>
 
 namespace vk_engine
 {
 namespace
 {
-uint32_t FindMemoryType(const VkContext& context, uint32_t filter)
-{
-    const vk::PhysicalDeviceMemoryProperties properties = context.GetPhysicalDevice().getMemoryProperties();
-    for (uint32_t index = 0; index < properties.memoryTypeCount; ++index)
-    {
-        if ((filter & (1U << index)) != 0 &&
-            (properties.memoryTypes[index].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal))
-            return index;
-    }
-    throw std::runtime_error("failed to find device-local image memory");
-}
 void Barrier(vk::CommandBuffer commandBuffer,
              vk::Image image,
              vk::ImageLayout oldLayout,
@@ -37,38 +29,41 @@ void Barrier(vk::CommandBuffer commandBuffer,
 }
 } // namespace
 
-VkImage2D::VkImage2D(const VkContext& context, vk::Extent2D extent, std::span<const std::byte> pixels)
+Image::Image(const VkContext& inContext, vk::Extent2D extent, std::span<const std::byte> pixels) : context(&inContext)
 {
-    VkBuffer staging(context,
-                     pixels.size_bytes(),
-                     vk::BufferUsageFlagBits::eTransferSrc,
-                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    Buffer staging(inContext,
+                   pixels.size_bytes(),
+                   vk::BufferUsageFlagBits::eTransferSrc,
+                   vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     staging.Write(pixels);
-    vk::ImageCreateInfo imageInfo{};
-    imageInfo.setImageType(vk::ImageType::e2D)
-        .setFormat(vk::Format::eR8G8B8A8Srgb)
-        .setExtent(vk::Extent3D{extent.width, extent.height, 1})
-        .setMipLevels(1)
-        .setArrayLayers(1)
-        .setSamples(vk::SampleCountFlagBits::e1)
-        .setTiling(vk::ImageTiling::eOptimal)
-        .setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled)
-        .setInitialLayout(vk::ImageLayout::eUndefined);
-    image = vk::raii::Image(context.GetDevice(), imageInfo);
-    const vk::MemoryRequirements requirements = image.getMemoryRequirements();
-    memory = vk::raii::DeviceMemory(
-        context.GetDevice(),
-        vk::MemoryAllocateInfo{requirements.size, FindMemoryType(context, requirements.memoryTypeBits)});
-    image.bindMemory(*memory, 0);
+
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageInfo.extent = VkExtent3D{extent.width, extent.height, 1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    VmaAllocationCreateInfo allocationCreateInfo{};
+    allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocationCreateInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    VK_CHECK(vmaCreateImage(context->GetAllocator(), &imageInfo, &allocationCreateInfo, &image, &allocation, nullptr));
+
     vk::raii::CommandPool pool(
-        context.GetDevice(),
-        vk::CommandPoolCreateInfo{vk::CommandPoolCreateFlagBits::eTransient, context.GetGraphicQueueFamilyIndex()});
-    vk::raii::CommandBuffers buffers(context.GetDevice(),
+        context->GetDevice(),
+        vk::CommandPoolCreateInfo{vk::CommandPoolCreateFlagBits::eTransient, context->GetGraphicQueueFamilyIndex()});
+    vk::raii::CommandBuffers buffers(context->GetDevice(),
                                      vk::CommandBufferAllocateInfo{*pool, vk::CommandBufferLevel::ePrimary, 1});
     const vk::raii::CommandBuffer& commandBuffer = buffers.front();
     commandBuffer.begin(vk::CommandBufferBeginInfo{vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
     Barrier(*commandBuffer,
-            *image,
+            image,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferDstOptimal,
             {},
@@ -77,13 +72,13 @@ VkImage2D::VkImage2D(const VkContext& context, vk::Extent2D extent, std::span<co
             vk::PipelineStageFlagBits::eTransfer);
     commandBuffer.copyBufferToImage(
         staging.GetHandle(),
-        *image,
+        image,
         vk::ImageLayout::eTransferDstOptimal,
         vk::BufferImageCopy{}
             .setImageSubresource(vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1})
             .setImageExtent(vk::Extent3D{extent.width, extent.height, 1}));
     Barrier(*commandBuffer,
-            *image,
+            image,
             vk::ImageLayout::eTransferDstOptimal,
             vk::ImageLayout::eShaderReadOnlyOptimal,
             vk::AccessFlagBits::eTransferWrite,
@@ -91,16 +86,58 @@ VkImage2D::VkImage2D(const VkContext& context, vk::Extent2D extent, std::span<co
             vk::PipelineStageFlagBits::eTransfer,
             vk::PipelineStageFlagBits::eFragmentShader);
     commandBuffer.end();
-    vk::raii::Fence fence(context.GetDevice(), vk::FenceCreateInfo{});
-    context.GetGraphicQueue().submit(vk::SubmitInfo{}.setCommandBuffers(*commandBuffer), *fence);
-    (void)context.GetDevice().waitForFences(*fence, VK_TRUE, UINT64_MAX);
+    vk::raii::Fence fence(context->GetDevice(), vk::FenceCreateInfo{});
+    context->GetGraphicQueue().submit(vk::SubmitInfo{}.setCommandBuffers(*commandBuffer), *fence);
+    (void)context->GetDevice().waitForFences(*fence, VK_TRUE, UINT64_MAX);
     imageView = vk::raii::ImageView(
-        context.GetDevice(),
+        context->GetDevice(),
         vk::ImageViewCreateInfo{{},
-                                *image,
+                                image,
                                 vk::ImageViewType::e2D,
                                 vk::Format::eR8G8B8A8Srgb,
                                 {},
                                 vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}});
+}
+
+Image::~Image()
+{
+    Destroy();
+}
+
+Image::Image(Image&& other) noexcept
+    : context(other.context), image(other.image), allocation(other.allocation), imageView(std::move(other.imageView))
+{
+    other.context = nullptr;
+    other.image = VK_NULL_HANDLE;
+    other.allocation = nullptr;
+}
+
+Image& Image::operator=(Image&& other) noexcept
+{
+    if (this == &other)
+    {
+        return *this;
+    }
+    Destroy();
+    context = other.context;
+    image = other.image;
+    allocation = other.allocation;
+    imageView = std::move(other.imageView);
+    other.context = nullptr;
+    other.image = VK_NULL_HANDLE;
+    other.allocation = nullptr;
+    return *this;
+}
+
+void Image::Destroy()
+{
+    imageView = nullptr;
+    if (context != nullptr && allocation != nullptr)
+    {
+        vmaDestroyImage(context->GetAllocator(), image, allocation);
+    }
+    context = nullptr;
+    image = VK_NULL_HANDLE;
+    allocation = nullptr;
 }
 } // namespace vk_engine

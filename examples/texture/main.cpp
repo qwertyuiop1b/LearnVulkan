@@ -35,13 +35,13 @@ int main()
                                                           texture_example::Vertex{{0.75F, 0.75F}, {1.0F, 0.0F}},
                                                           texture_example::Vertex{{-0.75F, 0.75F}, {0.0F, 0.0F}}};
     const std::array<uint32_t, 6> indices{0, 1, 2, 2, 3, 0};
-    vk_engine::VkBuffer vertexBuffer(engine.GetContext(),
+    vk_engine::Buffer vertexBuffer(engine.GetContext(),
                                      sizeof(vertices),
                                      vk::BufferUsageFlagBits::eVertexBuffer,
                                      vk::MemoryPropertyFlagBits::eHostVisible |
                                          vk::MemoryPropertyFlagBits::eHostCoherent);
     vertexBuffer.Write(std::as_bytes(std::span<const texture_example::Vertex>{vertices}));
-    vk_engine::VkBuffer indexBuffer(engine.GetContext(),
+    vk_engine::Buffer indexBuffer(engine.GetContext(),
                                     sizeof(indices),
                                     vk::BufferUsageFlagBits::eIndexBuffer,
                                     vk::MemoryPropertyFlagBits::eHostVisible |

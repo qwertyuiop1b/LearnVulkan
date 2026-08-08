@@ -5,6 +5,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_raii.hpp>
+#include "vk_vma.h"
 
 namespace vk_engine
 {
@@ -70,6 +71,11 @@ public:
         return presentQueueIndex;
     }
 
+    VmaAllocator GetAllocator() const noexcept
+    {
+        return allocator;
+    }
+
 private:
     const VkWindow& vkWindow;
 
@@ -84,5 +90,7 @@ private:
 
     uint32_t graphicQueueIndex{};
     uint32_t presentQueueIndex{};
+
+    VmaAllocator allocator {nullptr};
 };
 } // namespace vk_engine

@@ -37,8 +37,8 @@ int main()
     using ExpectedEngineRun = void (vk_engine::VkEngine::*)(const vk_engine::VkRenderer::RecordCallback&);
     static_assert(std::same_as<decltype(&vk_engine::VkEngine::Run), ExpectedEngineRun>);
 
-    static_assert(!std::is_copy_constructible_v<vk_engine::VkBuffer>);
-    static_assert(!std::is_copy_assignable_v<vk_engine::VkBuffer>);
+    static_assert(!std::is_copy_constructible_v<vk_engine::Buffer>);
+    static_assert(!std::is_copy_assignable_v<vk_engine::Buffer>);
     static_assert(!std::is_copy_constructible_v<vk_engine::ShaderModule>);
     static_assert(!std::is_copy_assignable_v<vk_engine::ShaderModule>);
     static_assert(!std::is_copy_constructible_v<vk_engine::GraphicsPipeline>);

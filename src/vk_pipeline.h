@@ -61,6 +61,7 @@ private:
 
     const VkContext& context;
     GraphicsPipelineDescription description;
+    
     vk::raii::PipelineLayout pipelineLayout{nullptr};
     vk::raii::Pipeline pipeline{nullptr};
     vk::Format colorFormat{vk::Format::eUndefined};

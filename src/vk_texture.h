@@ -14,7 +14,7 @@ public:
 
 private:
     const VkContext& context;
-    VkImage2D image;
+    Image image;
     vk::raii::Sampler sampler{nullptr};
 };
 } // namespace vk_engine

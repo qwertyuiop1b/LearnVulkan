@@ -51,11 +51,16 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     VK_CHECK(glfwCreateWindowSurface(vkbInstance.instance, &vkWindow.GetWindow(), nullptr, &rawSurface));
     surface = vk::raii::SurfaceKHR(instance, rawSurface);
 
+    VkPhysicalDeviceVulkan12Features features12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+    features12.bufferDeviceAddress = VK_TRUE;
     VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     features13.dynamicRendering = VK_TRUE;
 
     vkb::PhysicalDeviceSelector selector{vkbInstance};
-    const auto phyRet = selector.set_surface(*surface).add_required_extension_features(features13).select();
+    const auto phyRet = selector.set_surface(*surface)
+                            .add_required_extension_features(features12)
+                            .add_required_extension_features(features13)
+                            .select();
     if (!phyRet)
     {
         throw std::runtime_error("failed to select physical");
@@ -86,10 +91,19 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     vkbInstance.debug_messenger = VK_NULL_HANDLE;
     vkbPhysicalDevice.physical_device = VK_NULL_HANDLE;
     vkbDevice.device = VK_NULL_HANDLE;
+
+    VmaAllocatorCreateInfo vmaInfo {
+        .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+        .physicalDevice = *physicalDevice,
+        .device = *device,
+        .instance = *instance,
+    };
+    vmaCreateAllocator(&vmaInfo, &allocator);
 }
 
 VkContext::~VkContext()
 {
+    vmaDestroyAllocator(allocator);
 }
 
 } // namespace vk_engine
