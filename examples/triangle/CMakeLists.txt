@@ -19,7 +19,7 @@ endforeach()
 
 add_custom_target(vk-engine-triangle-shaders DEPENDS ${SHADER_BINARIES})
 
-add_executable(vk-engine-triangle main.cpp triangle_vertex.h)
+add_executable(vk-engine-triangle main.cpp)
 add_dependencies(vk-engine-triangle vk-engine-triangle-shaders)
 set_target_properties(vk-engine-triangle PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_compile_definitions(vk-engine-triangle PRIVATE VK_ENGINE_SHADER_DIR="${SHADER_OUTPUT_DIR}")

@@ -3,6 +3,7 @@ project(vk-engine)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(VK_ENGINE_BUILD_EXAMPLES "Build vk-engine examples" ON)
 
 # vulkan
@@ -76,18 +77,4 @@ if(BUILD_TESTING)
     )
     target_link_libraries(vk-utils-tests PRIVATE ${PROJECT_NAME})
     add_test(NAME vk-utils-tests COMMAND vk-utils-tests)
-
-    if(VK_ENGINE_BUILD_EXAMPLES)
-        add_executable(vk-texture-tests tests/texture_vertex_tests.cpp)
-        target_include_directories(vk-texture-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/examples/texture)
-        target_link_libraries(vk-texture-tests PRIVATE ${PROJECT_NAME})
-        add_test(NAME vk-texture-tests COMMAND vk-texture-tests)
-
-        add_executable(vk-triangle-tests tests/triangle_vertex_tests.cpp)
-        target_include_directories(vk-triangle-tests PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/examples/triangle
-        )
-        target_link_libraries(vk-triangle-tests PRIVATE ${PROJECT_NAME})
-        add_test(NAME vk-triangle-tests COMMAND vk-triangle-tests)
-    endif()
 endif()

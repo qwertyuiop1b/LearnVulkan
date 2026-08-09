@@ -1,4 +1,3 @@
-#include "texture_vertex.h"
 #include "vk_buffer.h"
 #include "vk_descriptor.h"
 #include "vk_engine.h"
@@ -10,7 +9,26 @@
 #include <filesystem>
 #include <span>
 #include <utility>
+#include <glm/glm.hpp>
 #include "imgui.h"
+
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec2 texCoord;
+    static vk_engine::VertexInputDescription GetInputDescription()
+    {
+        vk_engine::VertexInputDescription description;
+        description.bindings.push_back(
+            vk::VertexInputBindingDescription{0, sizeof(Vertex), vk::VertexInputRate::eVertex});
+        description.attributes.push_back(
+            vk::VertexInputAttributeDescription{0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)});
+        description.attributes.push_back(
+            vk::VertexInputAttributeDescription{1, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord)});
+        return description;
+    }
+};
+
 namespace
 {
 std::filesystem::path AssetPath(const char* name)
@@ -25,17 +43,17 @@ std::filesystem::path AssetPath(const char* name)
 int main()
 {
     vk_engine::VkEngine engine{};
-    const std::array<texture_example::Vertex, 4> vertices{texture_example::Vertex{{-0.75F, -0.75F}, {0.0F, 1.0F}},
-                                                          texture_example::Vertex{{0.75F, -0.75F}, {1.0F, 1.0F}},
-                                                          texture_example::Vertex{{0.75F, 0.75F}, {1.0F, 0.0F}},
-                                                          texture_example::Vertex{{-0.75F, 0.75F}, {0.0F, 0.0F}}};
+    const std::array<Vertex, 4> vertices{Vertex{{-0.75F, -0.75F}, {0.0F, 1.0F}},
+                                         Vertex{{0.75F, -0.75F}, {1.0F, 1.0F}},
+                                         Vertex{{0.75F, 0.75F}, {1.0F, 0.0F}},
+                                         Vertex{{-0.75F, 0.75F}, {0.0F, 0.0F}}};
     const std::array<uint32_t, 6> indices{0, 1, 2, 2, 3, 0};
     vk_engine::Buffer vertexBuffer(engine.GetContext(),
                                    sizeof(vertices),
                                    vk::BufferUsageFlagBits::eVertexBuffer,
                                    vk::MemoryPropertyFlagBits::eHostVisible |
                                        vk::MemoryPropertyFlagBits::eHostCoherent);
-    vertexBuffer.Write(std::as_bytes(std::span<const texture_example::Vertex>{vertices}));
+    vertexBuffer.Write(std::as_bytes(std::span<const Vertex>{vertices}));
     vk_engine::Buffer indexBuffer(engine.GetContext(),
                                   sizeof(indices),
                                   vk::BufferUsageFlagBits::eIndexBuffer,
@@ -55,7 +73,7 @@ int main()
     vk_engine::GraphicsPipelineDescription pipelineDescription{};
     pipelineDescription.vertexShader = vk_engine::ShaderPath("texture.vert.spv");
     pipelineDescription.fragmentShader = vk_engine::ShaderPath("texture.frag.spv");
-    pipelineDescription.vertexInput = texture_example::Vertex::GetInputDescription();
+    pipelineDescription.vertexInput = Vertex::GetInputDescription();
     pipelineDescription.pipelineLayout.descriptorSetLayouts.push_back(*setLayout);
     vk_engine::GraphicsPipeline pipeline(
         engine.GetContext(), std::move(pipelineDescription), engine.GetSwapchain().GetImageFormat());

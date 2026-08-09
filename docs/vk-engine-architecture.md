@@ -500,3 +500,139 @@ engine.Run([&](vk::CommandBuffer cmd, vk_engine::RenderHelper& helper)
 ```
 
 用户按需组合：纯图形 = triangle/texture；纯计算 = compute_clearcolor；UI = imgui/texture。
+
+## 七、生命周期时序图
+
+### 7.1 初始化：引擎与子系统创建顺序
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as 示例 main()
+    participant E as VkEngine
+    participant W as VkWindow
+    participant C as VkContext
+    participant S as VkSwapchain
+    participant R as VkRenderer
+
+    App->>E: VkEngine engine{}
+    E->>W: new VkWindow(width, height)
+    Note over W: glfwInit + glfwCreateWindow(GLFW_NO_API, resizable)
+    E->>C: new VkContext(*window)
+    Note over C: Instance → DebugMessenger → Surface → PhysicalDevice<br/>→ Device → Queue(graphic/present) → VMA allocator
+    E->>S: new VkSwapchain(*context, *window)
+    Note over S: vkb::SwapchainBuilder<br/>image usage = TRANSFER_DST
+    E->>R: new VkRenderer(*context, *swapchain)
+    Note over R: CreateDrawImage(R16G16B16A16Sfloat)<br/>2× VkFrameContext + renderFinished[imageCount]
+    App->>App: 建 Buffer / VkTexture / Descriptor 三件套<br/>/ GraphicsPipeline / VkImGui
+```
+
+要点：
+- 创建顺序严格自底向上：**窗口 → 上下文 → 交换链 → 渲染器**，每一步都依赖上一步的产物。
+- `VkContext` 内部句柄创建顺序：`instance → debugMessenger → surface → physicalDevice → device → queue → allocator`（`vk::raii` 接管后由成员逆序销毁）。
+
+### 7.2 单帧渲染时序（CPU/GPU 同步）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Loop as Run 主循环
+    participant W as VkWindow
+    participant R as VkRenderer
+    participant CB as 用户回调
+    participant GPU as GPU / Swapchain
+
+    loop 每帧
+        Loop->>W: ProcessPendingEvents()
+        Note over W: glfwPollEvents（输入/窗口事件）
+        Loop->>R: DrawFrame(callback)
+        R->>GPU: waitForFences(frames[cur].inFlight)
+        R->>GPU: acquireNextImage(∞, imageAvailable)
+        alt OutOfDateKHR
+            R->>R: RecreateSwapchain() + return（本帧跳过）
+        end
+        R->>R: imagesInFlight 检查 + commandPool.reset()<br/>+ commandBuffer.begin(OneTimeSubmit)
+        R->>CB: callback(commandBuffer, helper)
+        Note over CB: TransitionToGraphics/Compute → beginRendering<br/>→ 绘制(draw/drawIndexed/dispatch) → imgui.Render<br/>→ endRendering
+        R->>GPU: blit drawImage → swapchain(TRANSFER_SRC → TRANSFER_DST → PRESENT_SRC)
+        R->>GPU: submit(wait=imageAvailable@Transfer,<br/>signal=renderFinished[i], fence=inFlight)
+        R->>GPU: presentKHR(wait=renderFinished[i])
+        alt OutOfDate / Suboptimal
+            R->>R: RecreateSwapchain()
+        end
+        Note over R: currentFrame = (currentFrame + 1) % 2
+    end
+```
+
+同步链：
+```
+acquire ──imageAvailable──> submit ──renderFinished──> present
+帧 N 的 fence ──(帧 N+2 开头)──> 等待完成
+```
+
+### 7.3 销毁：资源析构顺序（逆创建序）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as 示例 main()
+    participant UI as VkImGui (栈)
+    participant P as GraphicsPipeline (栈)
+    participant T as VkTexture (栈)
+    participant B as Buffer (栈)
+    participant E as VkEngine
+    participant R as VkRenderer
+    participant S as VkSwapchain
+    participant C as VkContext
+    participant W as VkWindow
+
+    Note over App: Run() 返回 → main() 结束
+    App->>UI: ~VkImGui()
+    Note over UI: ImGui_ImplVulkan_Shutdown →<br/>ImGui_ImplGlfw_Shutdown → DestroyContext
+    App->>P: ~GraphicsPipeline()
+    App->>T: ~VkTexture()
+    Note over T: sampler 先析构 → Image::Destroy<br/>(imageView → vmaDestroyImage)
+    App->>B: ~Buffer()
+    Note over B: vmaDestroyBuffer
+    App->>E: ~VkEngine()
+    E->>R: ~VkRenderer()
+    Note over R: WaitIdle → frames 成员逆序<br/>(inFlight → imageAvailable → commandBuffer → commandPool)<br/>→ drawImage → renderFinished
+    E->>S: ~VkSwapchain()
+    Note over S: swapchain 句柄 + 图像句柄
+    E->>C: ~VkContext()
+    Note over C: vmaDestroyAllocator →<br/>device → physicalDevice → surface<br/>→ debugMessenger → instance
+    E->>W: ~VkWindow()
+    Note over W: glfwDestroyWindow + glfwTerminate
+```
+
+要点：
+- **统一遵守"逆创建序销毁"**：示例栈对象（后声明者先析构）→ `VkEngine` 成员（声明逆序：`renderer → swapchain → context → window`）。
+- 关键约束：**任何引用 `VkContext` 的对象必须比 `VkContext` 先销毁**（示例对象先于 engine 析构；renderer/swapchain 先于 context 析构）。
+- `VkContext` 析构 `allocator` 前，所有经 VMA 分配的资源（draw image、buffers、textures）必须已释放，否则 VMA 会报泄漏。
+
+### 7.4 Swapchain 重建时序（窗口 resize / OutOfDate）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant R as VkRenderer
+    participant S as VkSwapchain
+    participant GPU as GPU
+
+    R->>R: DrawFrame 捕获 OutOfDateKHR 或 Suboptimal
+    R->>R: HasValidFramebufferExtent() ?
+    alt framebuffer 尺寸合法
+        R->>GPU: WaitIdle()（确保旧资源无 GPU 使用）
+        R->>S: Recreate()（传旧 swapchain 句柄重建）
+        Note over S: vkb::SwapchainBuilder.set_old_swapchain(old)
+        R->>R: CreateDrawImage()（Image move 赋值替换旧 draw image）
+        R->>R: 重建 renderFinished / imagesInFlight / swapchainImageLayouts
+    else framebuffer 为 0（窗口最小化）
+        R->>R: return，跳过重建，下一帧重试
+    end
+```
+
+要点：
+- `RecreateSwapchain` 内部先 `WaitIdle`，保证旧 swapchain / draw image 不再被 GPU 使用后才重建，避免 use-after-free。
+- draw image 通过 `Image` 的 **move 赋值**替换：赋值内部先 `Destroy()` 旧资源再接管新的，天然安全。
+- 最小化时 framebuffer 尺寸为 0，`HasValidFramebufferExtent()` 返回 false，跳过重建避免创建零尺寸 swapchain 崩溃。

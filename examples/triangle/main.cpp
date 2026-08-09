@@ -1,4 +1,3 @@
-#include "triangle_vertex.h"
 
 #include "vk_buffer.h"
 #include "vk_engine.h"
@@ -8,25 +7,56 @@
 #include <array>
 #include <span>
 #include <utility>
+#include <glm/glm.hpp>
+
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    static vk_engine::VertexInputDescription GetInputDescription()
+    {
+        vk_engine::VertexInputDescription description;
+
+        vk::VertexInputBindingDescription binding{};
+        binding.setBinding(0).setStride(sizeof(Vertex)).setInputRate(vk::VertexInputRate::eVertex);
+        description.bindings.push_back(binding);
+
+        vk::VertexInputAttributeDescription positionAttribute{};
+        positionAttribute.setLocation(0)
+            .setBinding(0)
+            .setFormat(vk::Format::eR32G32Sfloat)
+            .setOffset(offsetof(Vertex, position));
+        description.attributes.push_back(positionAttribute);
+
+        vk::VertexInputAttributeDescription colorAttribute{};
+        colorAttribute.setLocation(1)
+            .setBinding(0)
+            .setFormat(vk::Format::eR32G32B32Sfloat)
+            .setOffset(offsetof(Vertex, color));
+        description.attributes.push_back(colorAttribute);
+
+        return description;
+    }
+};
 
 int main()
 {
     vk_engine::VkEngine engine{};
 
-    const std::array<triangle_example::Vertex, 3> vertices{
-        triangle_example::Vertex{glm::vec2{0.0F, -0.5F}, glm::vec3{1.0F, 0.0F, 0.0F}},
-        triangle_example::Vertex{glm::vec2{0.5F, 0.5F}, glm::vec3{0.0F, 1.0F, 0.0F}},
-        triangle_example::Vertex{glm::vec2{-0.5F, 0.5F}, glm::vec3{0.0F, 0.0F, 1.0F}}};
+    const std::array<::Vertex, 3> vertices{::Vertex{glm::vec2{0.0F, -0.5F}, glm::vec3{1.0F, 0.0F, 0.0F}},
+                                           ::Vertex{glm::vec2{0.5F, 0.5F}, glm::vec3{0.0F, 1.0F, 0.0F}},
+                                           ::Vertex{glm::vec2{-0.5F, 0.5F}, glm::vec3{0.0F, 0.0F, 1.0F}}};
     vk_engine::Buffer vertexBuffer(engine.GetContext(),
                                    sizeof(vertices),
                                    vk::BufferUsageFlagBits::eVertexBuffer,
                                    vk::MemoryPropertyFlagBits::eHostVisible |
                                        vk::MemoryPropertyFlagBits::eHostCoherent);
-    vertexBuffer.Write(std::as_bytes(std::span<const triangle_example::Vertex>{vertices}));
+    vertexBuffer.Write(std::as_bytes(std::span<const ::Vertex>{vertices}));
     vk_engine::GraphicsPipelineDescription pipelineDescription{};
     pipelineDescription.vertexShader = vk_engine::ShaderPath("simple.vert.spv");
     pipelineDescription.fragmentShader = vk_engine::ShaderPath("simple.frag.spv");
-    pipelineDescription.vertexInput = triangle_example::Vertex::GetInputDescription();
+    pipelineDescription.vertexInput = ::Vertex::GetInputDescription();
     vk_engine::GraphicsPipeline graphicsPipeline(
         engine.GetContext(), std::move(pipelineDescription), engine.GetSwapchain().GetImageFormat());
     engine.Run(

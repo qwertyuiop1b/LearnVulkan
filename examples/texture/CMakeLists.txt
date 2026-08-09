@@ -19,12 +19,12 @@ endforeach()
 
 add_custom_target(vk-engine-texture-shaders DEPENDS ${SHADER_BINARIES})
 
-add_executable(vk-engine-texture main.cpp texture_vertex.h)
+add_executable(vk-engine-texture main.cpp)
 add_dependencies(vk-engine-texture vk-engine-texture-shaders)
 set_target_properties(vk-engine-texture PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 target_compile_definitions(vk-engine-texture PRIVATE
     VK_ENGINE_SHADER_DIR="${SHADER_OUTPUT_DIR}"
-    VK_ENGINE_TEXTURE_ASSET_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+    VK_ENGINE_TEXTURE_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets"
 )
 target_include_directories(vk-engine-texture PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(vk-engine-texture PRIVATE vk-engine)
