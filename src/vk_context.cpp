@@ -55,9 +55,12 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     features12.bufferDeviceAddress = VK_TRUE;
     VkPhysicalDeviceVulkan13Features features13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
     features13.dynamicRendering = VK_TRUE;
+    VkPhysicalDeviceFeatures features{};
+    features.shaderStorageImageExtendedFormats = VK_TRUE;
 
     vkb::PhysicalDeviceSelector selector{vkbInstance};
     const auto phyRet = selector.set_surface(*surface)
+                            .set_required_features(features)
                             .add_required_extension_features(features12)
                             .add_required_extension_features(features13)
                             .select();
@@ -92,7 +95,7 @@ VkContext::VkContext(const VkWindow& inWindow) : vkWindow(inWindow)
     vkbPhysicalDevice.physical_device = VK_NULL_HANDLE;
     vkbDevice.device = VK_NULL_HANDLE;
 
-    VmaAllocatorCreateInfo vmaInfo {
+    VmaAllocatorCreateInfo vmaInfo{
         .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
         .physicalDevice = *physicalDevice,
         .device = *device,

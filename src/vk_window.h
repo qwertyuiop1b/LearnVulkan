@@ -13,7 +13,7 @@ public:
     ~VkWindow();
 
     VkWindow(const VkWindow&) = delete;
-    void operator=(const VkWindow&) = delete;
+    VkWindow& operator=(const VkWindow&) = delete;
 
     inline uint32_t GetWidth() const
     {

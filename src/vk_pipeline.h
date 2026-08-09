@@ -61,9 +61,46 @@ private:
 
     const VkContext& context;
     GraphicsPipelineDescription description;
-    
     vk::raii::PipelineLayout pipelineLayout{nullptr};
     vk::raii::Pipeline pipeline{nullptr};
     vk::Format colorFormat{vk::Format::eUndefined};
+};
+
+struct ComputePipelineDescription
+{
+    std::filesystem::path computeShader;
+    PipelineLayoutDescription pipelineLayout;
+};
+
+/**
+ * @brief Compute pipeline with bind/dispatch helpers.
+ */
+class ComputePipeline
+{
+public:
+    ComputePipeline(const VkContext& context, ComputePipelineDescription description);
+    ~ComputePipeline() = default;
+
+    ComputePipeline(const ComputePipeline&) = delete;
+    ComputePipeline& operator=(const ComputePipeline&) = delete;
+    ComputePipeline(ComputePipeline&&) = delete;
+    ComputePipeline& operator=(ComputePipeline&&) = delete;
+
+    void Bind(vk::CommandBuffer commandBuffer) const;
+    void Dispatch(vk::CommandBuffer commandBuffer,
+                  uint32_t groupCountX,
+                  uint32_t groupCountY,
+                  uint32_t groupCountZ = 1) const;
+
+    vk::PipelineLayout GetLayout() const noexcept
+    {
+        return *pipelineLayout;
+    }
+
+private:
+    const VkContext& context;
+    ComputePipelineDescription description;
+    vk::raii::PipelineLayout pipelineLayout{nullptr};
+    vk::raii::Pipeline pipeline{nullptr};
 };
 } // namespace vk_engine

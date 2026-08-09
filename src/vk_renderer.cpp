@@ -4,23 +4,64 @@
 
 namespace vk_engine
 {
+namespace
+{
+constexpr vk::ImageUsageFlags kDrawImageUsage = vk::ImageUsageFlagBits::eColorAttachment |
+                                                vk::ImageUsageFlagBits::eTransferSrc |
+                                                vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage;
+constexpr vk::Format kDrawImageFormat = vk::Format::eR16G16B16A16Sfloat;
+
+struct AccessStage
+{
+    vk::AccessFlags access{};
+    vk::PipelineStageFlags stage{};
+};
+
+AccessStage ResolveDrawImageSourceSync(vk::ImageLayout layout)
+{
+    if (layout == vk::ImageLayout::eGeneral)
+    {
+        return {vk::AccessFlagBits::eShaderWrite, vk::PipelineStageFlagBits::eComputeShader};
+    }
+    return {vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eColorAttachmentOutput};
+}
+
+void ExecuteImageBarrier(vk::CommandBuffer commandBuffer,
+                         vk::Image image,
+                         vk::ImageLayout oldLayout,
+                         vk::ImageLayout newLayout,
+                         vk::AccessFlags sourceAccess,
+                         vk::AccessFlags destinationAccess,
+                         vk::PipelineStageFlags sourceStage,
+                         vk::PipelineStageFlags destinationStage)
+{
+    vk::ImageMemoryBarrier barrier{};
+    barrier.setSrcAccessMask(sourceAccess)
+        .setDstAccessMask(destinationAccess)
+        .setOldLayout(oldLayout)
+        .setNewLayout(newLayout)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setImage(image)
+        .setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+    commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, {}, barrier);
+}
+} // namespace
+
 VkFrameContext::VkFrameContext(const vk::raii::Device& device, uint32_t queueFamilyIndex)
 {
     vk::CommandPoolCreateInfo commandPoolCreateInfo{};
     commandPoolCreateInfo.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
         .setQueueFamilyIndex(queueFamilyIndex);
     commandPool = vk::raii::CommandPool(device, commandPoolCreateInfo);
-
     vk::CommandBufferAllocateInfo commandBufferAllocateInfo{};
     commandBufferAllocateInfo.setCommandPool(*commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandBufferCount(1);
     vk::raii::CommandBuffers commandBuffers(device, commandBufferAllocateInfo);
     commandBuffer = std::move(commandBuffers.front());
-
     const vk::SemaphoreCreateInfo semaphoreCreateInfo{};
     imageAvailable = vk::raii::Semaphore(device, semaphoreCreateInfo);
-
     const vk::FenceCreateInfo fenceCreateInfo{vk::FenceCreateFlagBits::eSignaled};
     inFlight = vk::raii::Fence(device, fenceCreateInfo);
 }
@@ -30,8 +71,10 @@ VkRenderer::VkRenderer(const VkContext& inContext, VkSwapchain& inSwapchain)
       frames{VkFrameContext(context.GetDevice(), context.GetGraphicQueueFamilyIndex()),
              VkFrameContext(context.GetDevice(), context.GetGraphicQueueFamilyIndex())},
       renderFinished(CreateRenderFinishedSemaphores(context.GetDevice(), swapchain.GetImageCount())),
-      imagesInFlight(swapchain.GetImageCount()), imageLayouts(swapchain.GetImageCount(), vk::ImageLayout::eUndefined)
+      imagesInFlight(swapchain.GetImageCount()),
+      swapchainImageLayouts(swapchain.GetImageCount(), vk::ImageLayout::eUndefined)
 {
+    CreateDrawImage();
 }
 
 VkRenderer::~VkRenderer() noexcept
@@ -46,12 +89,17 @@ VkRenderer::~VkRenderer() noexcept
     }
 }
 
-void VkRenderer::DrawFrame(const RecordCallback& record)
+void VkRenderer::CreateDrawImage()
+{
+    drawImage = Image(context, swapchain.GetExtent(), kDrawImageFormat, kDrawImageUsage);
+    drawImageLayout = vk::ImageLayout::eUndefined;
+}
+
+void VkRenderer::DrawFrame(const RenderCallback& callback)
 {
     VkFrameContext& frame = frames[currentFrame];
     const vk::Fence frameFence = frame.inFlight;
     (void)context.GetDevice().waitForFences(frameFence, VK_TRUE, std::numeric_limits<uint64_t>::max());
-
     uint32_t imageIndex = 0;
     bool shouldRecreate = false;
     try
@@ -62,7 +110,6 @@ void VkRenderer::DrawFrame(const RecordCallback& record)
         {
             return;
         }
-
         imageIndex = acquireResult.value;
         shouldRecreate = acquireResult.result == vk::Result::eSuboptimalKHR;
     }
@@ -71,37 +118,60 @@ void VkRenderer::DrawFrame(const RecordCallback& record)
         RecreateSwapchain();
         return;
     }
-
     if (imagesInFlight[imageIndex])
     {
         (void)context.GetDevice().waitForFences(
             imagesInFlight[imageIndex], VK_TRUE, std::numeric_limits<uint64_t>::max());
     }
     imagesInFlight[imageIndex] = frameFence;
-
     frame.commandPool.reset();
-
     const vk::CommandBuffer commandBuffer = frame.commandBuffer;
     commandBuffer.begin(vk::CommandBufferBeginInfo{vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-
-    TransitionToColorAttachment(commandBuffer, swapchain.GetImage(imageIndex), imageLayouts[imageIndex]);
-    imageLayouts[imageIndex] = vk::ImageLayout::eColorAttachmentOptimal;
-
-    const RenderTarget renderTarget{swapchain.GetImage(imageIndex),
-                                    swapchain.GetImageView(imageIndex),
-                                    swapchain.GetExtent(),
-                                    swapchain.GetImageFormat()};
-    record(commandBuffer, renderTarget);
-
-    TransitionToPresent(commandBuffer, swapchain.GetImage(imageIndex));
-    imageLayouts[imageIndex] = vk::ImageLayout::ePresentSrcKHR;
-
+    RenderHelper helper(commandBuffer,
+                        drawImage.GetHandle(),
+                        drawImage.GetImageView(),
+                        drawImage.GetExtent(),
+                        drawImage.GetFormat(),
+                        drawImageLayout,
+                        currentFrame);
+    callback(commandBuffer, helper);
+    const AccessStage drawSourceSync = ResolveDrawImageSourceSync(drawImageLayout);
+    TransitionImage(commandBuffer,
+                    drawImage.GetHandle(),
+                    drawImageLayout,
+                    vk::ImageLayout::eTransferSrcOptimal,
+                    drawSourceSync.access,
+                    vk::AccessFlagBits::eTransferRead,
+                    drawSourceSync.stage,
+                    vk::PipelineStageFlagBits::eTransfer);
+    drawImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+    const vk::Image swapchainImage = swapchain.GetImage(imageIndex);
+    const vk::PipelineStageFlags swapchainSourceStage = swapchainImageLayouts[imageIndex] == vk::ImageLayout::eUndefined
+                                                            ? vk::PipelineStageFlagBits::eTopOfPipe
+                                                            : vk::PipelineStageFlagBits::eBottomOfPipe;
+    TransitionImage(commandBuffer,
+                    swapchainImage,
+                    swapchainImageLayouts[imageIndex],
+                    vk::ImageLayout::eTransferDstOptimal,
+                    {},
+                    vk::AccessFlagBits::eTransferWrite,
+                    swapchainSourceStage,
+                    vk::PipelineStageFlagBits::eTransfer);
+    swapchainImageLayouts[imageIndex] = vk::ImageLayout::eTransferDstOptimal;
+    BlitDrawImageToSwapchain(commandBuffer, swapchainImage);
+    TransitionImage(commandBuffer,
+                    swapchainImage,
+                    swapchainImageLayouts[imageIndex],
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::AccessFlagBits::eTransferWrite,
+                    {},
+                    vk::PipelineStageFlagBits::eTransfer,
+                    vk::PipelineStageFlagBits::eBottomOfPipe);
+    swapchainImageLayouts[imageIndex] = vk::ImageLayout::ePresentSrcKHR;
     commandBuffer.end();
-
     context.GetDevice().resetFences(frameFence);
-
     const vk::Semaphore waitSemaphore = frame.imageAvailable;
-    const vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    const vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eTransfer;
     const vk::Semaphore signalSemaphore = renderFinished[imageIndex];
     vk::SubmitInfo submitInfo{};
     submitInfo.setWaitSemaphores(waitSemaphore)
@@ -109,11 +179,9 @@ void VkRenderer::DrawFrame(const RecordCallback& record)
         .setCommandBuffers(commandBuffer)
         .setSignalSemaphores(signalSemaphore);
     context.GetGraphicQueue().submit(submitInfo, frameFence);
-
     const vk::SwapchainKHR swapchainHandle = swapchain.GetHandle();
     vk::PresentInfoKHR presentInfo{};
     presentInfo.setWaitSemaphores(signalSemaphore).setSwapchains(swapchainHandle).setImageIndices(imageIndex);
-
     try
     {
         shouldRecreate =
@@ -123,13 +191,11 @@ void VkRenderer::DrawFrame(const RecordCallback& record)
     {
         shouldRecreate = true;
     }
-
     if (shouldRecreate)
     {
         RecreateSwapchain();
     }
-
-    currentFrame = (currentFrame + 1) % kMaxFramesInFlight;
+    currentFrame = (currentFrame + 1) % RenderHelper::kFramesInFlight;
 }
 
 void VkRenderer::WaitIdle() const
@@ -156,51 +222,86 @@ void VkRenderer::RecreateSwapchain()
     {
         return;
     }
-
     WaitIdle();
     swapchain.Recreate();
+    CreateDrawImage();
     renderFinished = CreateRenderFinishedSemaphores(context.GetDevice(), swapchain.GetImageCount());
     imagesInFlight.assign(swapchain.GetImageCount(), nullptr);
-    imageLayouts.assign(swapchain.GetImageCount(), vk::ImageLayout::eUndefined);
+    swapchainImageLayouts.assign(swapchain.GetImageCount(), vk::ImageLayout::eUndefined);
 }
 
-void VkRenderer::TransitionToColorAttachment(vk::CommandBuffer commandBuffer,
-                                             vk::Image image,
-                                             vk::ImageLayout oldLayout) const
+void VkRenderer::TransitionImage(vk::CommandBuffer commandBuffer,
+                                 vk::Image image,
+                                 vk::ImageLayout oldLayout,
+                                 vk::ImageLayout newLayout,
+                                 vk::AccessFlags sourceAccess,
+                                 vk::AccessFlags destinationAccess,
+                                 vk::PipelineStageFlags sourceStage,
+                                 vk::PipelineStageFlags destinationStage) const
 {
-    vk::ImageMemoryBarrier barrier{};
-    barrier.setSrcAccessMask({})
-        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
-        .setOldLayout(oldLayout)
-        .setNewLayout(vk::ImageLayout::eColorAttachmentOptimal)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setImage(image)
-        .setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
-
-    const vk::PipelineStageFlags sourceStage = oldLayout == vk::ImageLayout::eUndefined
-                                                   ? vk::PipelineStageFlagBits::eTopOfPipe
-                                                   : vk::PipelineStageFlagBits::eBottomOfPipe;
-    commandBuffer.pipelineBarrier(sourceStage, vk::PipelineStageFlagBits::eColorAttachmentOutput, {}, {}, {}, barrier);
+    ExecuteImageBarrier(
+        commandBuffer, image, oldLayout, newLayout, sourceAccess, destinationAccess, sourceStage, destinationStage);
 }
 
-void VkRenderer::TransitionToPresent(vk::CommandBuffer commandBuffer, vk::Image image) const
+void VkRenderer::BlitDrawImageToSwapchain(vk::CommandBuffer commandBuffer, vk::Image swapchainImage) const
 {
-    vk::ImageMemoryBarrier barrier{};
-    barrier.setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite)
-        .setDstAccessMask({})
-        .setOldLayout(vk::ImageLayout::eColorAttachmentOptimal)
-        .setNewLayout(vk::ImageLayout::ePresentSrcKHR)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setImage(image)
-        .setSubresourceRange(vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1});
+    const vk::Extent2D extent = drawImage.GetExtent();
+    const vk::Offset3D extentOffset{static_cast<int32_t>(extent.width), static_cast<int32_t>(extent.height), 1};
+    vk::ImageBlit blitRegion{};
+    blitRegion.setSrcSubresource(vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1})
+        .setDstSubresource(vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0, 0, 1});
+    blitRegion.srcOffsets[0] = vk::Offset3D{0, 0, 0};
+    blitRegion.srcOffsets[1] = extentOffset;
+    blitRegion.dstOffsets[0] = vk::Offset3D{0, 0, 0};
+    blitRegion.dstOffsets[1] = extentOffset;
+    commandBuffer.blitImage(drawImage.GetHandle(),
+                            vk::ImageLayout::eTransferSrcOptimal,
+                            swapchainImage,
+                            vk::ImageLayout::eTransferDstOptimal,
+                            blitRegion,
+                            vk::Filter::eNearest);
+}
 
-    commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eColorAttachmentOutput,
-                                  vk::PipelineStageFlagBits::eBottomOfPipe,
-                                  {},
-                                  {},
-                                  {},
-                                  barrier);
+RenderHelper::RenderHelper(vk::CommandBuffer inCommandBuffer,
+                           vk::Image inImage,
+                           vk::ImageView inImageView,
+                           vk::Extent2D inExtent,
+                           vk::Format inFormat,
+                           vk::ImageLayout& inCurrentLayout,
+                           size_t inFrameIndex)
+    : commandBuffer(inCommandBuffer), image(inImage), imageView(inImageView), extent(inExtent), format(inFormat),
+      currentLayout(inCurrentLayout), frameIndex(inFrameIndex)
+{
+}
+
+void RenderHelper::TransitionTo(vk::ImageLayout newLayout, vk::AccessFlags dstAccess, vk::PipelineStageFlags dstStage)
+{
+    if (currentLayout == newLayout)
+    {
+        return;
+    }
+    vk::AccessFlags srcAccess{};
+    vk::PipelineStageFlags srcStage = vk::PipelineStageFlagBits::eTopOfPipe;
+    if (currentLayout != vk::ImageLayout::eUndefined)
+    {
+        const AccessStage sourceSync = ResolveDrawImageSourceSync(currentLayout);
+        srcAccess = sourceSync.access;
+        srcStage = sourceSync.stage;
+    }
+    ExecuteImageBarrier(commandBuffer, image, currentLayout, newLayout, srcAccess, dstAccess, srcStage, dstStage);
+    currentLayout = newLayout;
+}
+
+void RenderHelper::TransitionToCompute()
+{
+    TransitionTo(
+        vk::ImageLayout::eGeneral, vk::AccessFlagBits::eShaderWrite, vk::PipelineStageFlagBits::eComputeShader);
+}
+
+void RenderHelper::TransitionToGraphics()
+{
+    TransitionTo(vk::ImageLayout::eColorAttachmentOptimal,
+                 vk::AccessFlagBits::eColorAttachmentWrite,
+                 vk::PipelineStageFlagBits::eColorAttachmentOutput);
 }
 } // namespace vk_engine

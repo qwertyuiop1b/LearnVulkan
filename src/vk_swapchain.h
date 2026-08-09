@@ -43,11 +43,6 @@ public:
         return static_cast<uint32_t>(swapchainImages.size());
     }
 
-    const std::vector<vk::raii::ImageView>& GetImageViews() const noexcept
-    {
-        return swapchainImageViews;
-    }
-
     const std::vector<vk::Image>& GetImages() const noexcept
     {
         return swapchainImages;
@@ -56,11 +51,6 @@ public:
     vk::Image GetImage(uint32_t index) const
     {
         return swapchainImages.at(index);
-    }
-
-    vk::ImageView GetImageView(uint32_t index) const
-    {
-        return swapchainImageViews.at(index);
     }
 
     bool HasValidFramebufferExtent() const noexcept;
@@ -73,7 +63,6 @@ private:
 
     vk::raii::SwapchainKHR swapchain{nullptr};
     std::vector<vk::Image> swapchainImages;
-    std::vector<vk::raii::ImageView> swapchainImageViews;
     vk::Format format{vk::Format::eUndefined};
     vk::Extent2D extent{};
 };

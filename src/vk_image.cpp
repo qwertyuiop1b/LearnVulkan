@@ -2,7 +2,6 @@
 
 #include "vk_utils.h"
 
-#include <stdexcept>
 #include <utility>
 
 namespace vk_engine
@@ -29,32 +28,53 @@ void Barrier(vk::CommandBuffer commandBuffer,
 }
 } // namespace
 
-Image::Image(const VkContext& inContext, vk::Extent2D extent, std::span<const std::byte> pixels) : context(&inContext)
+void Image::Create(const VkContext& inContext, vk::Extent2D inExtent, vk::Format inFormat, vk::ImageUsageFlags usage)
 {
-    Buffer staging(inContext,
-                   pixels.size_bytes(),
-                   vk::BufferUsageFlagBits::eTransferSrc,
-                   vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-    staging.Write(pixels);
-
+    context = &inContext;
+    extent = inExtent;
+    format = inFormat;
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+    imageInfo.format = static_cast<VkFormat>(format);
     imageInfo.extent = VkExtent3D{extent.width, extent.height, 1};
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    imageInfo.usage = static_cast<VkImageUsageFlags>(usage);
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
     VmaAllocationCreateInfo allocationCreateInfo{};
     allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
     allocationCreateInfo.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
     VK_CHECK(vmaCreateImage(context->GetAllocator(), &imageInfo, &allocationCreateInfo, &image, &allocation, nullptr));
+    imageView = vk::raii::ImageView(
+        context->GetDevice(),
+        vk::ImageViewCreateInfo{{},
+                                image,
+                                vk::ImageViewType::e2D,
+                                format,
+                                {},
+                                vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}});
+}
 
+Image::Image(const VkContext& inContext, vk::Extent2D inExtent, vk::Format inFormat, vk::ImageUsageFlags usage)
+{
+    Create(inContext, inExtent, inFormat, usage);
+}
+
+Image::Image(const VkContext& inContext, vk::Extent2D inExtent, std::span<const std::byte> pixels)
+{
+    Create(inContext,
+           inExtent,
+           vk::Format::eR8G8B8A8Srgb,
+           vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled);
+    Buffer staging(inContext,
+                   pixels.size_bytes(),
+                   vk::BufferUsageFlagBits::eTransferSrc,
+                   vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    staging.Write(pixels);
     vk::raii::CommandPool pool(
         context->GetDevice(),
         vk::CommandPoolCreateInfo{vk::CommandPoolCreateFlagBits::eTransient, context->GetGraphicQueueFamilyIndex()});
@@ -89,14 +109,6 @@ Image::Image(const VkContext& inContext, vk::Extent2D extent, std::span<const st
     vk::raii::Fence fence(context->GetDevice(), vk::FenceCreateInfo{});
     context->GetGraphicQueue().submit(vk::SubmitInfo{}.setCommandBuffers(*commandBuffer), *fence);
     (void)context->GetDevice().waitForFences(*fence, VK_TRUE, UINT64_MAX);
-    imageView = vk::raii::ImageView(
-        context->GetDevice(),
-        vk::ImageViewCreateInfo{{},
-                                image,
-                                vk::ImageViewType::e2D,
-                                vk::Format::eR8G8B8A8Srgb,
-                                {},
-                                vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}});
 }
 
 Image::~Image()
@@ -105,11 +117,10 @@ Image::~Image()
 }
 
 Image::Image(Image&& other) noexcept
-    : context(other.context), image(other.image), allocation(other.allocation), imageView(std::move(other.imageView))
+    : context(other.context), image(other.image), allocation(other.allocation), imageView(std::move(other.imageView)),
+      extent(other.extent), format(other.format)
 {
-    other.context = nullptr;
-    other.image = VK_NULL_HANDLE;
-    other.allocation = nullptr;
+    other.ReleaseOwnership();
 }
 
 Image& Image::operator=(Image&& other) noexcept
@@ -123,10 +134,19 @@ Image& Image::operator=(Image&& other) noexcept
     image = other.image;
     allocation = other.allocation;
     imageView = std::move(other.imageView);
-    other.context = nullptr;
-    other.image = VK_NULL_HANDLE;
-    other.allocation = nullptr;
+    extent = other.extent;
+    format = other.format;
+    other.ReleaseOwnership();
     return *this;
+}
+
+void Image::ReleaseOwnership() noexcept
+{
+    context = nullptr;
+    image = VK_NULL_HANDLE;
+    allocation = nullptr;
+    extent = vk::Extent2D{};
+    format = vk::Format::eUndefined;
 }
 
 void Image::Destroy()
@@ -136,8 +156,6 @@ void Image::Destroy()
     {
         vmaDestroyImage(context->GetAllocator(), image, allocation);
     }
-    context = nullptr;
-    image = VK_NULL_HANDLE;
-    allocation = nullptr;
+    ReleaseOwnership();
 }
 } // namespace vk_engine

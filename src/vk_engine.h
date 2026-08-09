@@ -16,7 +16,7 @@ public:
     explicit VkEngine(uint32_t width = 800, uint32_t height = 600);
     ~VkEngine();
 
-    void Run(const VkRenderer::RecordCallback& record);
+    void Run(const VkRenderer::RenderCallback& callback);
     void WaitIdle() const;
 
     const VkContext& GetContext() const noexcept

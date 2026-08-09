@@ -3,6 +3,7 @@
 #include "vk_descriptor.h"
 #include "vk_engine.h"
 #include "vk_pipeline.h"
+#include "vk_shader.h"
 #include "vk_texture.h"
 #include <array>
 #include <filesystem>
@@ -18,14 +19,6 @@ std::filesystem::path AssetPath(const char* name)
     return std::filesystem::path{"assets"} / name;
 #endif
 }
-std::filesystem::path ShaderPath(const char* name)
-{
-#ifdef VK_ENGINE_TEXTURE_SHADER_DIR
-    return std::filesystem::path{VK_ENGINE_TEXTURE_SHADER_DIR} / name;
-#else
-    return std::filesystem::path{"shaders"} / name;
-#endif
-}
 } // namespace
 int main()
 {
@@ -36,52 +29,60 @@ int main()
                                                           texture_example::Vertex{{-0.75F, 0.75F}, {0.0F, 0.0F}}};
     const std::array<uint32_t, 6> indices{0, 1, 2, 2, 3, 0};
     vk_engine::Buffer vertexBuffer(engine.GetContext(),
-                                     sizeof(vertices),
-                                     vk::BufferUsageFlagBits::eVertexBuffer,
-                                     vk::MemoryPropertyFlagBits::eHostVisible |
-                                         vk::MemoryPropertyFlagBits::eHostCoherent);
+                                   sizeof(vertices),
+                                   vk::BufferUsageFlagBits::eVertexBuffer,
+                                   vk::MemoryPropertyFlagBits::eHostVisible |
+                                       vk::MemoryPropertyFlagBits::eHostCoherent);
     vertexBuffer.Write(std::as_bytes(std::span<const texture_example::Vertex>{vertices}));
     vk_engine::Buffer indexBuffer(engine.GetContext(),
-                                    sizeof(indices),
-                                    vk::BufferUsageFlagBits::eIndexBuffer,
-                                    vk::MemoryPropertyFlagBits::eHostVisible |
-                                        vk::MemoryPropertyFlagBits::eHostCoherent);
+                                  sizeof(indices),
+                                  vk::BufferUsageFlagBits::eIndexBuffer,
+                                  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     indexBuffer.Write(std::as_bytes(std::span<const uint32_t>{indices}));
     vk_engine::VkTexture texture(engine.GetContext(), AssetPath("awesome_face.png"));
-    vk_engine::VkTextureDescriptor descriptor(engine.GetContext(), texture);
+    vk_engine::DescriptorLayoutBuilder layoutBuilder;
+    layoutBuilder.AddBinding(0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
+    vk::raii::DescriptorSetLayout setLayout = layoutBuilder.Build(engine.GetContext());
+    vk_engine::DescriptorAllocator descriptorAllocator(engine.GetContext());
+    const vk::DescriptorSet descriptorSet = descriptorAllocator.Allocate(*setLayout);
+    const vk::DescriptorImageInfo imageInfo = texture.GetDescriptorInfo();
+    vk_engine::DescriptorWriter writer;
+    writer.WriteImage(
+        0, imageInfo.imageView, imageInfo.sampler, imageInfo.imageLayout, vk::DescriptorType::eCombinedImageSampler);
+    writer.Update(engine.GetContext(), descriptorSet);
     vk_engine::GraphicsPipelineDescription pipelineDescription{};
-    pipelineDescription.vertexShader = ShaderPath("texture.vert.spv");
-    pipelineDescription.fragmentShader = ShaderPath("texture.frag.spv");
+    pipelineDescription.vertexShader = vk_engine::ShaderPath("texture.vert.spv");
+    pipelineDescription.fragmentShader = vk_engine::ShaderPath("texture.frag.spv");
     pipelineDescription.vertexInput = texture_example::Vertex::GetInputDescription();
-    pipelineDescription.pipelineLayout.descriptorSetLayouts.push_back(descriptor.GetLayout());
+    pipelineDescription.pipelineLayout.descriptorSetLayouts.push_back(*setLayout);
     vk_engine::GraphicsPipeline pipeline(
         engine.GetContext(), std::move(pipelineDescription), engine.GetSwapchain().GetImageFormat());
     engine.Run(
-        [&](vk::CommandBuffer commandBuffer, const vk_engine::RenderTarget& target)
+        [&](vk::CommandBuffer commandBuffer, vk_engine::RenderHelper& helper)
         {
-            pipeline.EnsureCompatible(target.colorFormat);
+            helper.TransitionToGraphics();
+            const vk::Format colorFormat = helper.GetDrawImageFormat();
+            const vk::Extent2D extent = helper.GetDrawExtent();
+            pipeline.EnsureCompatible(colorFormat);
             vk::RenderingAttachmentInfo colorAttachment{};
-            colorAttachment.setImageView(target.imageView)
+            colorAttachment.setImageView(helper.GetDrawImageView())
                 .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
                 .setLoadOp(vk::AttachmentLoadOp::eClear)
                 .setStoreOp(vk::AttachmentStoreOp::eStore)
                 .setClearValue(vk::ClearValue{vk::ClearColorValue{std::array<float, 4>{0.03F, 0.03F, 0.03F, 1.0F}}});
             vk::RenderingInfo renderingInfo{};
-            renderingInfo.setRenderArea(vk::Rect2D{{0, 0}, target.extent})
+            renderingInfo.setRenderArea(vk::Rect2D{{0, 0}, extent})
                 .setLayerCount(1)
                 .setColorAttachments(colorAttachment);
             commandBuffer.beginRendering(renderingInfo);
             pipeline.Bind(commandBuffer);
-            commandBuffer.setViewport(0,
-                                      vk::Viewport{0.0F,
-                                                   0.0F,
-                                                   static_cast<float>(target.extent.width),
-                                                   static_cast<float>(target.extent.height),
-                                                   0.0F,
-                                                   1.0F});
-            commandBuffer.setScissor(0, vk::Rect2D{{0, 0}, target.extent});
+            commandBuffer.setViewport(
+                0,
+                vk::Viewport{
+                    0.0F, 0.0F, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0F, 1.0F});
+            commandBuffer.setScissor(0, vk::Rect2D{{0, 0}, extent});
             commandBuffer.bindDescriptorSets(
-                vk::PipelineBindPoint::eGraphics, pipeline.GetLayout(), 0, descriptor.GetSet(), {});
+                vk::PipelineBindPoint::eGraphics, pipeline.GetLayout(), 0, descriptorSet, {});
             commandBuffer.bindVertexBuffers(0, vertexBuffer.GetHandle(), vk::DeviceSize{0});
             commandBuffer.bindIndexBuffer(indexBuffer.GetHandle(), 0, vk::IndexType::eUint32);
             commandBuffer.drawIndexed(6, 1, 0, 0, 0);

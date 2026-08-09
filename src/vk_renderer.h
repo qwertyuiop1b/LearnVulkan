@@ -1,6 +1,7 @@
 #pragma once
 
 #include "vk_context.h"
+#include "vk_image.h"
 #include "vk_swapchain.h"
 
 #include <array>
@@ -11,12 +12,55 @@
 
 namespace vk_engine
 {
-struct RenderTarget
+/**
+ * @brief Per-frame helper for transitioning and querying the offscreen draw image.
+ */
+class RenderHelper
 {
+public:
+    static constexpr size_t kFramesInFlight = 2;
+
+    RenderHelper(vk::CommandBuffer commandBuffer,
+                 vk::Image image,
+                 vk::ImageView imageView,
+                 vk::Extent2D extent,
+                 vk::Format format,
+                 vk::ImageLayout& currentLayout,
+                 size_t frameIndex);
+
+    void TransitionToCompute();
+    void TransitionToGraphics();
+
+    vk::ImageView GetDrawImageView() const noexcept
+    {
+        return imageView;
+    }
+
+    vk::Extent2D GetDrawExtent() const noexcept
+    {
+        return extent;
+    }
+
+    vk::Format GetDrawImageFormat() const noexcept
+    {
+        return format;
+    }
+
+    size_t GetFrameIndex() const noexcept
+    {
+        return frameIndex;
+    }
+
+private:
+    void TransitionTo(vk::ImageLayout newLayout, vk::AccessFlags dstAccess, vk::PipelineStageFlags dstStage);
+
+    vk::CommandBuffer commandBuffer;
     vk::Image image;
     vk::ImageView imageView;
     vk::Extent2D extent;
-    vk::Format colorFormat;
+    vk::Format format;
+    vk::ImageLayout& currentLayout;
+    size_t frameIndex;
 };
 
 class VkFrameContext
@@ -40,7 +84,7 @@ public:
 class VkRenderer
 {
 public:
-    using RecordCallback = std::function<void(vk::CommandBuffer commandBuffer, const RenderTarget& target)>;
+    using RenderCallback = std::function<void(vk::CommandBuffer commandBuffer, RenderHelper& helper)>;
 
     VkRenderer(const VkContext& context, VkSwapchain& swapchain);
     ~VkRenderer() noexcept;
@@ -50,24 +94,32 @@ public:
     VkRenderer(VkRenderer&&) = delete;
     VkRenderer& operator=(VkRenderer&&) = delete;
 
-    void DrawFrame(const RecordCallback& record);
+    void DrawFrame(const RenderCallback& callback);
     void WaitIdle() const;
 
 private:
-    static constexpr size_t kMaxFramesInFlight = 2;
-
+    void CreateDrawImage();
     void RecreateSwapchain();
     static std::vector<vk::raii::Semaphore> CreateRenderFinishedSemaphores(const vk::raii::Device& device,
                                                                            uint32_t imageCount);
-    void TransitionToColorAttachment(vk::CommandBuffer commandBuffer, vk::Image image, vk::ImageLayout oldLayout) const;
-    void TransitionToPresent(vk::CommandBuffer commandBuffer, vk::Image image) const;
+    void TransitionImage(vk::CommandBuffer commandBuffer,
+                         vk::Image image,
+                         vk::ImageLayout oldLayout,
+                         vk::ImageLayout newLayout,
+                         vk::AccessFlags sourceAccess,
+                         vk::AccessFlags destinationAccess,
+                         vk::PipelineStageFlags sourceStage,
+                         vk::PipelineStageFlags destinationStage) const;
+    void BlitDrawImageToSwapchain(vk::CommandBuffer commandBuffer, vk::Image swapchainImage) const;
 
     const VkContext& context;
     VkSwapchain& swapchain;
-    std::array<VkFrameContext, kMaxFramesInFlight> frames;
+    Image drawImage;
+    vk::ImageLayout drawImageLayout{vk::ImageLayout::eUndefined};
+    std::array<VkFrameContext, RenderHelper::kFramesInFlight> frames;
     std::vector<vk::raii::Semaphore> renderFinished;
     std::vector<vk::Fence> imagesInFlight;
-    std::vector<vk::ImageLayout> imageLayouts;
+    std::vector<vk::ImageLayout> swapchainImageLayouts;
     size_t currentFrame = 0;
 };
 } // namespace vk_engine

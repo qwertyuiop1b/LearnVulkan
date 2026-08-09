@@ -112,4 +112,32 @@ void GraphicsPipeline::CreatePipeline(vk::Format newColorFormat)
     pipeline = std::move(newPipeline);
     colorFormat = newColorFormat;
 }
+
+ComputePipeline::ComputePipeline(const VkContext& inContext, ComputePipelineDescription inDescription)
+    : context(inContext), description(std::move(inDescription))
+{
+    vk::PipelineLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.setSetLayouts(description.pipelineLayout.descriptorSetLayouts)
+        .setPushConstantRanges(description.pipelineLayout.pushConstantRanges);
+    pipelineLayout = vk::raii::PipelineLayout(context.GetDevice(), layoutCreateInfo);
+    const ShaderModule computeShader(context.GetDevice(), description.computeShader);
+    vk::PipelineShaderStageCreateInfo shaderStage{};
+    shaderStage.setStage(vk::ShaderStageFlagBits::eCompute).setModule(computeShader.GetHandle()).setPName("main");
+    vk::ComputePipelineCreateInfo pipelineCreateInfo{};
+    pipelineCreateInfo.setStage(shaderStage).setLayout(*pipelineLayout);
+    pipeline = vk::raii::Pipeline(context.GetDevice(), nullptr, pipelineCreateInfo);
+}
+
+void ComputePipeline::Bind(vk::CommandBuffer commandBuffer) const
+{
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, *pipeline);
+}
+
+void ComputePipeline::Dispatch(vk::CommandBuffer commandBuffer,
+                               uint32_t groupCountX,
+                               uint32_t groupCountY,
+                               uint32_t groupCountZ) const
+{
+    commandBuffer.dispatch(groupCountX, groupCountY, groupCountZ);
+}
 } // namespace vk_engine

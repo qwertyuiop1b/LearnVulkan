@@ -23,7 +23,6 @@ int main()
     static_assert(std::same_as<decltype(std::declval<const vk_engine::VkSwapchain&>().GetImages()),
                                const std::vector<vk::Image>&>);
     static_assert(std::same_as<decltype(std::declval<const vk_engine::VkSwapchain&>().GetImage(0)), vk::Image>);
-    static_assert(std::same_as<decltype(std::declval<const vk_engine::VkSwapchain&>().GetImageView(0)), vk::ImageView>);
 
     static_assert(!std::is_copy_constructible_v<vk_engine::VkFrameContext>);
     static_assert(!std::is_copy_assignable_v<vk_engine::VkFrameContext>);
@@ -32,9 +31,9 @@ int main()
     static_assert(!std::is_move_constructible_v<vk_engine::VkRenderer>);
     static_assert(!std::is_move_assignable_v<vk_engine::VkRenderer>);
 
-    using ExpectedRecordCallback = std::function<void(vk::CommandBuffer, const vk_engine::RenderTarget&)>;
-    static_assert(std::same_as<vk_engine::VkRenderer::RecordCallback, ExpectedRecordCallback>);
-    using ExpectedEngineRun = void (vk_engine::VkEngine::*)(const vk_engine::VkRenderer::RecordCallback&);
+    using ExpectedRenderCallback = std::function<void(vk::CommandBuffer, vk_engine::RenderHelper&)>;
+    static_assert(std::same_as<vk_engine::VkRenderer::RenderCallback, ExpectedRenderCallback>);
+    using ExpectedEngineRun = void (vk_engine::VkEngine::*)(const vk_engine::VkRenderer::RenderCallback&);
     static_assert(std::same_as<decltype(&vk_engine::VkEngine::Run), ExpectedEngineRun>);
 
     static_assert(!std::is_copy_constructible_v<vk_engine::Buffer>);
@@ -54,6 +53,8 @@ int main()
     assert(!pipelineDescription.depthTestEnable);
     assert(!pipelineDescription.depthWriteEnable);
     assert(!pipelineDescription.blendEnable);
+
+    assert(vk_engine::ShaderPath("test.spv") == std::filesystem::path{"shaders"} / "test.spv");
 
     const std::filesystem::path shaderTestDirectory =
         std::filesystem::temp_directory_path() / "learnvulkan_shader_tests";
