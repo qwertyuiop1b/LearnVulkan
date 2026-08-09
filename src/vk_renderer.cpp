@@ -89,6 +89,11 @@ VkRenderer::~VkRenderer() noexcept
     }
 }
 
+vk::Format VkRenderer::DrawImageFormat()
+{
+    return kDrawImageFormat;
+}
+
 void VkRenderer::CreateDrawImage()
 {
     drawImage = Image(context, swapchain.GetExtent(), kDrawImageFormat, kDrawImageUsage);

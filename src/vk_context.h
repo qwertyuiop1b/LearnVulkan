@@ -36,19 +36,9 @@ public:
         return surface;
     }
 
-    VkPhysicalDevice GetPhysicalDeviceHandle() const noexcept
+    const vk::raii::Instance& GetInstance() const noexcept
     {
-        return static_cast<VkPhysicalDevice>(static_cast<vk::PhysicalDevice>(physicalDevice));
-    }
-
-    VkDevice GetDeviceHandle() const noexcept
-    {
-        return static_cast<VkDevice>(static_cast<vk::Device>(device));
-    }
-
-    VkSurfaceKHR GetSurfaceHandle() const noexcept
-    {
-        return static_cast<VkSurfaceKHR>(static_cast<vk::SurfaceKHR>(surface));
+        return instance;
     }
 
     const vk::raii::Queue& GetGraphicQueue() const noexcept
@@ -91,6 +81,6 @@ private:
     uint32_t graphicQueueIndex{};
     uint32_t presentQueueIndex{};
 
-    VmaAllocator allocator {nullptr};
+    VmaAllocator allocator{nullptr};
 };
 } // namespace vk_engine

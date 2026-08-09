@@ -94,6 +94,8 @@ public:
     VkRenderer(VkRenderer&&) = delete;
     VkRenderer& operator=(VkRenderer&&) = delete;
 
+    static vk::Format DrawImageFormat();
+
     void DrawFrame(const RenderCallback& callback);
     void WaitIdle() const;
 

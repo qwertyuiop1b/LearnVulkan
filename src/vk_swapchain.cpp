@@ -33,9 +33,9 @@ void VkSwapchain::Create(VkSwapchainKHR oldSwapchain)
         throw std::runtime_error("cannot create a swapchain for a zero-sized framebuffer");
     }
 
-    vkb::SwapchainBuilder builder{context.GetPhysicalDeviceHandle(),
-                                  context.GetDeviceHandle(),
-                                  context.GetSurfaceHandle(),
+    vkb::SwapchainBuilder builder{*context.GetPhysicalDevice(),
+                                  *context.GetDevice(),
+                                  *context.GetSurface(),
                                   context.GetGraphicQueueFamilyIndex(),
                                   context.GetPresentQueueFamilyIndex()};
 

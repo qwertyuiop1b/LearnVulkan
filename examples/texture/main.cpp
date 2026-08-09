@@ -2,6 +2,7 @@
 #include "vk_buffer.h"
 #include "vk_descriptor.h"
 #include "vk_engine.h"
+#include "vk_imgui.h"
 #include "vk_pipeline.h"
 #include "vk_shader.h"
 #include "vk_texture.h"
@@ -9,6 +10,7 @@
 #include <filesystem>
 #include <span>
 #include <utility>
+#include "imgui.h"
 namespace
 {
 std::filesystem::path AssetPath(const char* name)
@@ -57,9 +59,26 @@ int main()
     pipelineDescription.pipelineLayout.descriptorSetLayouts.push_back(*setLayout);
     vk_engine::GraphicsPipeline pipeline(
         engine.GetContext(), std::move(pipelineDescription), engine.GetSwapchain().GetImageFormat());
+    vk_engine::VkImGui imgui(engine.GetContext(),
+                             &engine.GetWindowHandle(),
+                             engine.GetDrawImageFormat(),
+                             2,
+                             engine.GetSwapchain().GetImageCount());
+    bool showDemoWindow = true;
     engine.Run(
         [&](vk::CommandBuffer commandBuffer, vk_engine::RenderHelper& helper)
         {
+            imgui.BeginFrame();
+            ImGui::Begin("Texture Example");
+            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+            ImGui::Text("Renders a texture-mapped quad.");
+            ImGui::Checkbox("Show Demo Window", &showDemoWindow);
+            ImGui::End();
+            if (showDemoWindow)
+            {
+                ImGui::ShowDemoWindow(&showDemoWindow);
+            }
+
             helper.TransitionToGraphics();
             const vk::Format colorFormat = helper.GetDrawImageFormat();
             const vk::Extent2D extent = helper.GetDrawExtent();
@@ -86,6 +105,7 @@ int main()
             commandBuffer.bindVertexBuffers(0, vertexBuffer.GetHandle(), vk::DeviceSize{0});
             commandBuffer.bindIndexBuffer(indexBuffer.GetHandle(), 0, vk::IndexType::eUint32);
             commandBuffer.drawIndexed(6, 1, 0, 0, 0);
+            imgui.Render(commandBuffer);
             commandBuffer.endRendering();
         });
 }

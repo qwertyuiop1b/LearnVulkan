@@ -1,5 +1,7 @@
 .cache
 .vscode
+.cursor
+.codebuddy
 .DS_Store
 .vs
 .idea
@@ -25,4 +27,5 @@
 
 build
 bin
+imgui.ini
 

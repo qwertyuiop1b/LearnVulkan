@@ -14,12 +14,12 @@ VkEngine::~VkEngine()
 {
 }
 
-void VkEngine::Run(const VkRenderer::RenderCallback& callback)
+void VkEngine::Run(const VkRenderer::RenderCallback& renderCallback)
 {
     while (!window->ShouldClose())
     {
         window->ProcessPendingEvents();
-        renderer->DrawFrame(callback);
+        renderer->DrawFrame(renderCallback);
     }
 
     renderer->WaitIdle();

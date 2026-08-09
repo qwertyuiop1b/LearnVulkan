@@ -16,7 +16,7 @@ public:
     explicit VkEngine(uint32_t width = 800, uint32_t height = 600);
     ~VkEngine();
 
-    void Run(const VkRenderer::RenderCallback& callback);
+    void Run(const VkRenderer::RenderCallback& renderCallback);
     void WaitIdle() const;
 
     const VkContext& GetContext() const noexcept
@@ -27,6 +27,16 @@ public:
     const VkSwapchain& GetSwapchain() const noexcept
     {
         return *swapchain;
+    }
+
+    vk::Format GetDrawImageFormat() const noexcept
+    {
+        return VkRenderer::DrawImageFormat();
+    }
+
+    GLFWwindow& GetWindowHandle() const noexcept
+    {
+        return window->GetWindow();
     }
 
 private:

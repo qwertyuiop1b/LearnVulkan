@@ -23,6 +23,24 @@ add_subdirectory(external/glm)
 # vma
 add_subdirectory(external/VulkanMemoryAllocator)
 
+# imgui (core + glfw platform backend + vulkan renderer backend)
+set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/imgui)
+add_library(imgui-lib STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+)
+target_include_directories(
+    imgui-lib PUBLIC
+    ${IMGUI_DIR}
+    ${IMGUI_DIR}/backends
+)
+target_link_libraries(imgui-lib PUBLIC glfw Vulkan::Vulkan)
+set_target_properties(imgui-lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS src/*.cpp src/*.h src/*.hpp)
 
@@ -37,13 +55,14 @@ target_include_directories(
     external/VulkanMemoryAllocator/include
     external/stb
 )
-target_link_libraries(${PROJECT_NAME} PUBLIC glfw Vulkan::Vulkan vk-bootstrap::vk-bootstrap)
+target_link_libraries(${PROJECT_NAME} PUBLIC glfw Vulkan::Vulkan vk-bootstrap::vk-bootstrap imgui-lib)
 
 if(VK_ENGINE_BUILD_EXAMPLES)
     find_program(GLSLC_EXECUTABLE NAMES glslc REQUIRED)
     add_subdirectory(examples/texture)
     add_subdirectory(examples/triangle)
     add_subdirectory(examples/compute_clearcolor)
+    add_subdirectory(examples/imgui)
 endif()
 
 include(CTest)
